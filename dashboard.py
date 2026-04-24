@@ -1,7 +1,7 @@
 # dashboard.py
 import streamlit as st
 from app.ui.components import inject_styles, signal_card, metric_card
-from app.ui.tabs import render_tab1, render_tab2, render_tab3, render_tab4, render_tab5, render_tab6
+from app.ui.tabs import render_tab1, render_tab2, render_tab3, render_tab4, render_tab5, render_tab6, render_tab7
 from datetime import datetime
 
 # Konfigurasi
@@ -45,7 +45,7 @@ with st.sidebar:
     st.markdown("**Disclaimer:** Do your own research, cunt.")
 
 # Tabs dengan ikon
-tab_titles = ["🏆 Top Saham", "🥇 Emas + Signal", "🔮 Prediksi", "🔍 Search", "📰 Info", "⚡ Scalping"]
+tab_titles = ["🏆 Top Saham", "🥇 Emas + Signal", "🔮 Prediksi", "🔍 Search", "📰 Info", "⚡ Scalping", "🦈 BANDAR"]
 tabs = st.tabs(tab_titles)
 
 with tabs[0]:
@@ -60,3 +60,5 @@ with tabs[4]:
     render_tab5()
 with tabs[5]:
     render_tab6()
+with tabs[6]:
+    render_tab7()
