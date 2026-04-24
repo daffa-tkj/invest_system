@@ -640,3 +640,172 @@ def render_tab6():
         with st.expander("📝 Alasan Signal"):
             for reason in signal['reasons']:
                 st.write(f"✅ {reason}")
+
+def render_tab7():
+    """Tab khusus liat bandar - Pilih kode broker, lihat saham mana yang mereka akumulasi/distribusi"""
+    st.subheader("🦈 TRACKING BANDAR - CARI SAHAM YANG DIKONTROL BROKER")
+    st.caption("""
+    Pilih kode broker, sistem akan menampilkan saham-saham yang sedang diakumulasi (net buy) atau didistribusi (net sell) oleh broker tersebut.
+    
+    **Kode Broker:**  
+    AK (UBS), BK (JP Morgan), LG (Trimegah), HP (Henan Putihrai), NI (BNI Sekuritas), RF (Buana Capital),  
+    CC (Mandiri Sekuritas), OD (BRI Danareksa), IF (Samuel), YP (Mirae Asset), ZP (Maybank), AI (UOB), DR (RHB)
+    """)
+    
+    # Daftar broker yang tersedia
+    from app.utils.broker_codes import BROKER_CODES
+    
+    broker_options = []
+    for code, info in BROKER_CODES.items():
+        broker_options.append({
+            'code': code,
+            'name': info['name'],
+            'type': info['type'],
+            'display': f"{code} - {info['name']} ({'ASING' if info['type'] == 'FOREIGN' else 'LOKAL'})"
+        })
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        selected_broker = st.selectbox(
+            "Pilih Kode Broker",
+            options=broker_options,
+            format_func=lambda x: x['display'],
+            key="bandar_broker_select"
+        )
+    
+    with col2:
+        filter_type = st.selectbox(
+            "Filter Transaksi",
+            options=["SEMUA", "AKUMULASI (Net Buy)", "DISTRIBUSI (Net Sell)"],
+            index=0,
+            key="bandar_filter_type"
+        )
+    
+    if not selected_broker:
+        st.info("Silakan pilih kode broker terlebih dahulu")
+        return
+    
+    broker_code = selected_broker['code']
+    broker_name = selected_broker['name']
+    
+    st.markdown(f"### 🔍 Tracking: **{broker_code} - {broker_name}**")
+    
+    with st.spinner(f"Mencari saham yang diakumulasi/distribusi oleh {broker_code}..."):
+        from app.core.analysis import get_realtime_broker_summary, get_stock_data
+        from app.utils.config import STOCKS
+        
+        # Ambil sample saham (batasi 50 dulu biar cepet)
+        sample_stocks = STOCKS[:50]
+        
+        stock_activity = []
+        progress_bar = st.progress(0)
+        
+        for idx, sym in enumerate(sample_stocks):
+            progress_bar.progress((idx + 1) / len(sample_stocks))
+            
+            broker_df = get_realtime_broker_summary(sym)
+            if broker_df is not None and not broker_df.empty:
+                # Cari data untuk broker yang dipilih
+                broker_row = broker_df[broker_df['BrokerCode'] == broker_code]
+                if not broker_row.empty:
+                    row = broker_row.iloc[0]
+                    buy = row['BuyVolume']
+                    sell = row['SellVolume']
+                    net = buy - sell
+                    
+                    if net != 0:
+                        # Ambil harga saham untuk konteks
+                        df_price = get_stock_data(sym, period="1mo")
+                        current_price = df_price['Close'].iloc[-1] if df_price is not None and not df_price.empty else 0
+                        currency, _ = get_currency(sym)
+                        price_label = "Rp" if currency == "IDR" else "$"
+                        
+                        net_lot = net // 100
+                        buy_lot = buy // 100
+                        sell_lot = sell // 100
+                        
+                        if net > 0:
+                            aksi = "AKUMULASI"
+                            aksi_icon = "🔥"
+                        else:
+                            aksi = "DISTRIBUSI"
+                            aksi_icon = "⚠️"
+                        
+                        stock_activity.append({
+                            'Kode Saham': sym,
+                            'Harga': f"{price_label}{current_price:,.0f}".replace(',', '.'),
+                            'Beli (Lot)': f"{buy_lot:,.0f}",
+                            'Jual (Lot)': f"{sell_lot:,.0f}",
+                            'Net (Lot)': f"{'+' if net_lot > 0 else ''}{net_lot:,.0f}",
+                            'Aksi': f"{aksi_icon} {aksi}",
+                            'Net Volume': net_lot
+                        })
+        
+        progress_bar.empty()
+        
+        if not stock_activity:
+            st.warning(f"Tidak ditemukan saham yang diakumulasi/distribusi oleh {broker_code} dalam 50 saham teratas")
+            return
+        
+        # Filter berdasarkan aksi
+        if filter_type == "AKUMULASI (Net Buy)":
+            stock_activity = [s for s in stock_activity if 'AKUMULASI' in s['Aksi']]
+        elif filter_type == "DISTRIBUSI (Net Sell)":
+            stock_activity = [s for s in stock_activity if 'DISTRIBUSI' in s['Aksi']]
+        
+        # Urutkan berdasarkan volume net terbesar
+        stock_activity.sort(key=lambda x: abs(x['Net Volume']), reverse=True)
+        
+        # Statistik
+        total_accum = sum([s['Net Volume'] for s in stock_activity if s['Net Volume'] > 0])
+        total_dist = sum([abs(s['Net Volume']) for s in stock_activity if s['Net Volume'] < 0])
+        
+        st.markdown("### 📊 Ringkasan Aktivitas")
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("Total Saham", len(stock_activity))
+        with col_s2:
+            st.metric("🔥 Total Akumulasi", f"{total_accum:+,} lot")
+        with col_s3:
+            st.metric("⚠️ Total Distribusi", f"{total_dist:+,} lot")
+        
+        if total_accum > total_dist:
+            st.success(f"📈 **{broker_code} sedang NET AKUMULASI** sebesar {total_accum - total_dist:+,} lot - Bullish signal!")
+        elif total_dist > total_accum:
+            st.error(f"📉 **{broker_code} sedang NET DISTRIBUSI** sebesar {total_dist - total_accum:+,} lot - Bearish signal!")
+        else:
+            st.info(f"➡️ **{broker_code} netral** - Tidak ada akumulasi/distribusi signifikan")
+        
+        st.divider()
+        st.markdown(f"### 📋 Daftar Saham yang Diakumulasi/Distribusi oleh **{broker_code}**")
+        
+        # Tampilkan tabel
+        df_display = pd.DataFrame(stock_activity)
+        df_display = df_display.drop(columns=['Net Volume'])
+        
+        st.dataframe(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Kode Saham': st.column_config.TextColumn('Kode Saham', width='small'),
+                'Harga': st.column_config.TextColumn('Harga', width='small'),
+                'Beli (Lot)': st.column_config.TextColumn('Beli (Lot)', width='small'),
+                'Jual (Lot)': st.column_config.TextColumn('Jual (Lot)', width='small'),
+                'Net (Lot)': st.column_config.TextColumn('Net (Lot)', width='small'),
+                'Aksi': st.column_config.TextColumn('Sinyal', width='small'),
+            }
+        )
+        
+        # Highlight saham dengan net volume terbesar
+        st.divider()
+        st.markdown("### 🎯 Top 5 Saham dengan Volume Terbesar")
+        
+        top_5 = stock_activity[:5]
+        for s in top_5:
+            if 'AKUMULASI' in s['Aksi']:
+                st.success(f"**{s['Kode Saham']}** - {s['Aksi']} - Net {s['Net (Lot)']} lot @ {s['Harga']}")
+            else:
+                st.error(f"**{s['Kode Saham']}** - {s['Aksi']} - Net {s['Net (Lot)']} lot @ {s['Harga']}")
+        
+        st.caption("⚠️ **Catatan:** Data ini simulasi berdasarkan 50 saham teratas. Untuk data real-time akurat, perlu integrasi API RTI Business. Harga saham adalah harga terkini dari Yahoo Finance.")
