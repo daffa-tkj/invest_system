@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Konfigurasi
 st.set_page_config(
-    page_title="💰 InvestIQ - Sistem Analisis Saham & Emas",
+    page_title="💰 Sistem Analisis Saham & Emas",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -18,7 +18,7 @@ inject_styles()
 # Title dengan HTML
 st.markdown("""
 <div style="text-align:center; padding:20px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); border-radius:20px; margin-bottom:30px;">
-    <h1 style="color:white;">💰 InvestIQ Pro</h1>
+    <h1 style="color:white;">💰 Ridho Capital</h1>
     <p style="color:#e0e0e0;">Analisis Fundamental | Teknikal | Entry Signal | Scalping Emas</p>
     <p style="color:#c0c0c0; font-size:12px;">Last update: {}</p>
 </div>
