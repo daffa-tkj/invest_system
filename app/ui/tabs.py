@@ -808,33 +808,6 @@ def render_tab4():
                     ebitda_text = f"Rp {ebitda/1e6:.2f} Juta" if ebitda > 0 else "N/A"
                 st.metric("EBITDA", ebitda_text)
         
-        # ========== PEMEGANG SAHAM ==========
-        st.markdown("### 👥 Pemegang Saham Mayoritas")
-        try:
-            ticker_obj = yf.Ticker(symbol)
-            major_holders = ticker_obj.major_holders
-            if major_holders is not None and not major_holders.empty:
-                st.dataframe(major_holders, use_container_width=True, hide_index=True)
-            else:
-                st.info("Data pemegang saham tidak tersedia")
-        except:
-            st.info("Data pemegang saham tidak tersedia")
-        
-        # ========== INSTITUTIONAL HOLDERS ==========
-        st.markdown("### 🏦 Kepemilikan Institusi (Top 10)")
-        try:
-            ticker_obj = yf.Ticker(symbol)
-            inst_holders = ticker_obj.institutional_holders
-            if inst_holders is not None and not inst_holders.empty:
-                inst_display = inst_holders.head(10).copy()
-                inst_display['Shares'] = inst_display['Shares'].apply(lambda x: f"{x:,.0f}")
-                inst_display['% Out'] = inst_display['% Out'].apply(lambda x: f"{x:.2f}%" if x else "N/A")
-                st.dataframe(inst_display[['Holder', 'Shares', '% Out']], use_container_width=True, hide_index=True)
-            else:
-                st.info("Data kepemilikan institusi tidak tersedia")
-        except:
-            st.info("Data kepemilikan institusi tidak tersedia")
-        
         # ========== CHART CANDLESTICK ==========
         st.markdown("### 📈 Candlestick Chart (90 hari terakhir)")
         
