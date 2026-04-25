@@ -182,9 +182,10 @@ def render_tab3():
         for group in ALL_KONGLOMERAT_GROUPS:
             dropdown_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}"))
     
-    # Semua saham individual dari STOCKS
     dropdown_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR"))
-    for sym in STOCKS[:50]:
+    # Filter saham yang valid (yang ada titik JK)
+    valid_stocks = [s for s in ALL_STOCKS if '.JK' in s]
+    for sym in valid_stocks[:100]:  # Tampilkan 100 saham pertama
         dropdown_options.append((f"📊 {sym}", sym))
     
     selected_label, selected_value = st.selectbox(
@@ -504,6 +505,19 @@ def render_tab4():
     top_stocks = ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 'ADRO.JK', 'BRPT.JK', 'TPIA.JK', 'UNVR.JK', 'ICBP.JK']
     for sym in top_stocks:
         search_options.append((f"📈 {sym}", sym, ""))
+    
+    # Tambahkan search manual input
+    st.markdown("---")
+    st.markdown("### 🔍 Cari Manual")
+    manual_search = st.text_input("Atau ketik kode saham langsung:", placeholder="Contoh: BBCA.JK, ADRO.JK, TLKM.JK").upper().strip()
+    
+    if manual_search:
+        if manual_search.endswith('.JK') or manual_search in ALL_STOCKS:
+            selected_value = manual_search
+            # Proses langsung ke bawah (skip selectbox)
+        else:
+            st.error(f"Kode saham {manual_search} tidak valid")
+            return
     
     selected_item = st.selectbox("Pilih Grup Konglomerat / Saham", options=search_options, format_func=lambda x: x[0])
     
