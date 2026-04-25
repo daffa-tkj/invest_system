@@ -523,6 +523,11 @@ def render_tab4():
     
     selected_value = selected_item[1]
     
+     # Cek apakah selected_item valid
+    if len(selected_item) < 2:
+        st.info("Pilih grup konglomerat atau saham dari menu di atas")
+        return
+    
     if selected_value == "SEPARATOR":
         st.info("Pilih grup konglomerat atau saham dari menu di atas")
         return
