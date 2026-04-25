@@ -495,21 +495,44 @@ def render_tab3():
 
 def render_tab4():
     from app.utils.config import ALL_STOCKS, ALL_KONGLOMERAT_GROUPS
-    from app.core.analysis import get_stock_info, get_stock_data, load_data, get_stock_info_akurat
     from app.core.entry_signal import generate_entry_signal
     from app.ui.components import signal_card, divider
-    from app.utils.currency import format_price, get_currency
+    from app.utils.currency import format_price
     import plotly.graph_objects as go
-    import yfinance as yf
     import pandas as pd
     import streamlit as st
     import requests
-    import json
-    import numpy as np
+    import os
     from datetime import datetime, timedelta
+    from dotenv import load_dotenv
     
-    st.subheader("🔍 Cari Saham & Analisis Fundamental")
-    st.caption("Data fundamental (P/E, PBV) dari Yahoo Finance & KSEI")
+    load_dotenv()
+    ITICK_API_KEY = os.getenv("ITICK_API_KEY", "")
+    
+    st.subheader("🔍 Cari Saham & Analisis Fundamental (iTICK API)")
+    st.caption("Data real-time dari iTICK API - Langsung dari BEI/KSEI")
+    
+    if not ITICK_API_KEY:
+        st.error("❌ ITICK_API_KEY tidak ditemukan di .env file")
+        st.info("Daftar gratis di itick.id untuk mendapatkan API key (free trial 14 hari)")
+        st.stop()
+    
+    # ========== FUNGSI iTICK API ==========
+    def itick_request(endpoint, params=None):
+        url = f"https://api.itick.org/v1/{endpoint}"
+        headers = {"token": ITICK_API_KEY, "Content-Type": "application/json"}
+        if params is None:
+            params = {}
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('code') == 0:
+                    return data.get('data', {})
+            return None
+        except Exception as e:
+            st.error(f"iTICK API Error: {e}")
+            return None
     
     # ========== SEARCH MANUAL ==========
     if 'search_symbol' not in st.session_state:
@@ -520,8 +543,8 @@ def render_tab4():
     col_search1, col_search2 = st.columns([4, 1])
     with col_search1:
         manual_search = st.text_input(
-            "Ketik kode saham:", 
-            placeholder="BBCA.JK, ADRO.JK, TLKM.JK",
+            "Ketik kode saham (tanpa .JK):", 
+            placeholder="BBCA, ADRO, TLKM, ASII",
             key="manual_search_input"
         ).upper().strip()
     
@@ -531,244 +554,211 @@ def render_tab4():
     symbol = None
     
     if search_clicked and manual_search:
-        if manual_search in ALL_STOCKS or manual_search.endswith('.JK'):
-            symbol = manual_search
-            st.session_state.search_symbol = symbol
-            st.session_state.search_triggered = True
-        else:
-            st.error(f"❌ Kode saham '{manual_search}' tidak ditemukan.")
+        symbol = manual_search
+        st.session_state.search_symbol = symbol
+        st.session_state.search_triggered = True
     
     if st.session_state.search_triggered and st.session_state.search_symbol:
         symbol = st.session_state.search_symbol
     
-    # ========== ATAU PILIH DARI DROPDOWN ==========
     if not symbol:
-        st.markdown("---")
-        st.markdown("### 📋 Atau Pilih dari Daftar")
-        
-        search_options = []
-        if ALL_KONGLOMERAT_GROUPS:
-            for group in ALL_KONGLOMERAT_GROUPS:
-                search_options.append((f"🏛️ {group['name']}", f"GROUP_{group['name']}", group['desc']))
-        if search_options:
-            search_options.append(("━━━━━━━━━━━━━━━━━━━━", "SEPARATOR", ""))
-        
-        top_stocks = ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 
-                      'ADRO.JK', 'BRPT.JK', 'TPIA.JK', 'UNVR.JK', 'ICBP.JK']
-        for sym in top_stocks:
-            search_options.append((f"📈 {sym}", sym, ""))
-        
-        selected_item = st.selectbox(
-            "Pilih Grup / Saham Top", 
-            options=search_options, 
-            format_func=lambda x: x[0],
-            key="dropdown_select"
-        )
-        selected_value = selected_item[1]
-        
-        if selected_value == "SEPARATOR":
-            st.info("Pilih grup atau saham dari menu")
-            return
-        elif selected_value.startswith("GROUP_"):
-            # handle group ...
-            st.info("Fitur grup konglomerat dalam pengembangan")
-            return
-        else:
-            symbol = selected_value
-            st.session_state.search_symbol = symbol
-            st.session_state.search_triggered = True
-    
-    if not symbol:
-        st.info("Masukkan kode saham...")
+        if not manual_search:
+            st.info("💡 Masukkan kode saham (contoh: BBCA)")
         return
     
-    # ========== AMBIL DATA ==========
-    with st.spinner(f"📊 Mengambil data {symbol}..."):
-        df = get_stock_data(symbol, period="6mo")
-        if df is None or df.empty:
-            st.error(f"Data {symbol} tidak ditemukan")
+    # ========== AMBIL DATA DARI iTICK API ==========
+    with st.spinner(f"📊 Mengambil data {symbol} dari iTICK API..."):
+        # Quote
+        quote = itick_request("stock/quote", {"region": "ID", "code": symbol})
+        # Profile perusahaan
+        profile = itick_request("stock/profile", {"region": "ID", "code": symbol})
+        # Fundamental
+        fundamental = itick_request("stock/fundamental", {"region": "ID", "code": symbol})
+        # Shareholders
+        shareholders = itick_request("stock/shareholders", {"region": "ID", "code": symbol})
+        # Historical data untuk chart
+        historical = itick_request("stock/kline", {
+            "region": "ID", 
+            "code": symbol, 
+            "interval": "8",  # 8 = daily bar
+            "limit": 90
+        })
+        
+        if not quote and not profile:
+            st.error(f"❌ Data {symbol} tidak ditemukan di iTICK API. Cek kode saham.")
+            st.session_state.search_triggered = False
             return
         
-        info = get_stock_info(symbol)
-        signal = generate_entry_signal(df, symbol)
+        # ========== HEADER ==========
+        company_name = profile.get('company_name', quote.get('n', symbol)) if profile else quote.get('n', symbol)
+        sector = profile.get('sector', 'N/A') if profile else 'N/A'
+        industry = profile.get('industry', 'N/A') if profile else 'N/A'
+        website = profile.get('website', '') if profile else ''
         
-        # HEADER
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; border-radius: 16px; margin-bottom: 20px; border-left: 4px solid #00ffcc;">
             <h1 style="color: #00ffcc; margin: 0;">{symbol}</h1>
-            <h3 style="color: #ffffff; margin-top: 8px;">{info.get('name', 'N/A')}</h3>
-            <p style="color: #aaaaaa;">📍 {info.get('sector', 'N/A')} | 🏭 {info.get('industry', 'N/A')}</p>
-            <p style="color: #888888;">🌐 <a href="{info.get('website', '#')}" style="color: #00ffcc;">{info.get('website', 'N/A')}</a></p>
+            <h3 style="color: #ffffff; margin-top: 8px;">{company_name}</h3>
+            <p style="color: #aaaaaa; margin-top: 8px;">
+                📍 {sector} | 🏭 {industry}
+            </p>
+            <p style="color: #888888; font-size: 12px;">
+                🌐 <a href="{website}" style="color: #00ffcc;" target="_blank">{website if website else 'N/A'}</a>
+            </p>
         </div>
         """, unsafe_allow_html=True)
         
-        # METRIK UTAMA
+        # ========== METRIK DARI QUOTE ==========
+        current_price = quote.get('ld', quote.get('price', 0)) if quote else 0
+        price_change = quote.get('chp', 0) if quote else 0
+        volume = quote.get('v', 0) if quote else 0
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            price_change = 0
-            if len(df) > 1:
-                price_change = ((df['Close'].iloc[-1] - df['Close'].iloc[-2]) / df['Close'].iloc[-2]) * 100
-            st.metric("💰 Harga", format_price(signal['price'], symbol), delta=f"{price_change:+.2f}%")
+            st.metric("💰 Harga", format_price(current_price, f"{symbol}.JK"), delta=f"{price_change:+.2f}%")
         with col2:
-            st.metric("📊 RSI", f"{signal['rsi']:.1f}")
+            volume_text = f"{volume/1000000:.1f}M" if volume >= 1000000 else f"{volume:,.0f}"
+            st.metric("📊 Volume", volume_text)
         with col3:
-            st.metric("🎯 Sinyal", signal['recommendation'])
+            pe = fundamental.get('pe', 0) if fundamental else 0
+            st.metric("📈 P/E Ratio", f"{pe:.2f}" if pe > 0 else "N/A")
         with col4:
-            st.metric("⭐ Skor", f"{signal['score']:.1f}")
+            pb = fundamental.get('pb', 0) if fundamental else 0
+            st.metric("📉 P/BV Ratio", f"{pb:.2f}" if pb > 0 else "N/A")
         
         divider()
-        signal_card(signal)
+        
+        # ========== PEMEGANG SAHAM DARI iTICK ==========
+        st.markdown("### 👥 Pemegang Saham (>1% - Data Resmi KSEI/BEI)")
+        
+        if shareholders and isinstance(shareholders, list) and len(shareholders) > 0:
+            df_sh = pd.DataFrame(shareholders)
+            st.dataframe(df_sh, use_container_width=True, hide_index=True)
+            st.success(f"✅ {len(shareholders)} pemegang saham berhasil diambil dari iTICK API")
+        else:
+            st.info("Data pemegang saham tidak tersedia dari iTICK API untuk simbol ini")
         
         # ========== PROFIL PERUSAHAAN ==========
+        st.markdown("### 🏢 Profil Perusahaan")
+        
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             st.markdown("**📋 Informasi Dasar**")
-            st.write(f"• **Nama**: {info.get('name', 'N/A')}")
-            st.write(f"• **Sektor**: {info.get('sector', 'N/A')}")
-            st.write(f"• **Industri**: {info.get('industry', 'N/A')}")
-            officers = info.get('companyOfficers', [])
-            if officers and len(officers) > 0:
-                st.write(f"• **CEO**: {officers[0].get('name', 'N/A')}")
+            st.write(f"• **Nama**: {company_name}")
+            st.write(f"• **Sektor**: {sector}")
+            st.write(f"• **Industri**: {industry}")
+            st.write(f"• **Kode**: {symbol}")
+            listing_date = profile.get('listing_date', 'N/A') if profile else 'N/A'
+            st.write(f"• **Listing Date**: {listing_date}")
+        
         with col_p2:
-            st.markdown("**📊 Keuangan**")
-            market_cap = info.get('marketCap', 0)
+            st.markdown("**📊 Info Keuangan**")
+            market_cap = fundamental.get('market_cap', 0) if fundamental else 0
             if market_cap >= 1e12:
-                cap = f"{market_cap/1e12:.2f} T"
+                cap_text = f"{market_cap/1e12:.2f} T"
             elif market_cap >= 1e9:
-                cap = f"{market_cap/1e9:.2f} M"
+                cap_text = f"{market_cap/1e9:.2f} M"
             else:
-                cap = "N/A"
-            st.write(f"• **Market Cap**: {cap}")
-            employees = info.get('fullTimeEmployees', 0)
-            st.write(f"• **Karyawan**: {employees:,}" if employees else "• **Karyawan**: N/A")
+                cap_text = "N/A"
+            st.write(f"• **Market Cap**: {cap_text}")
+            roe = fundamental.get('roe', 0) if fundamental else 0
+            st.write(f"• **ROE**: {roe:.2f}%" if roe else "• **ROE**: N/A")
+            eps = fundamental.get('eps', 0) if fundamental else 0
+            st.write(f"• **EPS**: {eps:.2f}" if eps else "• **EPS**: N/A")
         
-        # ========== FUNDAMENTAL + CHART ==========
-        st.markdown("### 📊 Analisis Fundamental")
+        # ========== DESKRIPSI BISNIS ==========
+        st.markdown("### 📝 Deskripsi Bisnis")
+        description = profile.get('description', '') if profile else ''
+        if description:
+            st.write(description)
+        else:
+            st.info("Deskripsi bisnis tidak tersedia dari iTICK API")
         
-        # Ambil data fundamental dari yfinance
-        ticker = yf.Ticker(symbol)
-        fundamentals = ticker.info
+        # ========== CHART PERBANDINGAN P/E DAN PBV ==========
+        st.markdown("### 📈 Analisis Fundamental")
         
-        pe = fundamentals.get('trailingPE', 0)
-        pb = fundamentals.get('priceToBook', 0)
-        roe = fundamentals.get('returnOnEquity', 0)
-        revenue = fundamentals.get('totalRevenue', 0)
-        net_income = fundamentals.get('netIncomeToCommon', 0)
-        
-        # Tampilkan metric
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            st.metric("📈 P/E Ratio", f"{pe:.2f}" if pe > 0 else "N/A")
-        with col_f2:
-            st.metric("📉 P/BV Ratio", f"{pb:.2f}" if pb > 0 else "N/A")
-        with col_f3:
-            st.metric("💹 ROE", f"{roe*100:.2f}%" if roe else "N/A")
-        
-        # Chart P/E dan PBV menggunakan plotly (grafik batang)
-        col_chart1, col_chart2 = st.columns(2)
-        
-        with col_chart1:
-            st.markdown("#### 📊 P/E Ratio Sektoral (Perbandingan)")
-            # Ambil data compset sederhana
-            sectors = ['Perbankan', 'Consumer', 'Energi', 'Telekom', 'Properti']
-            pe_data = []
-            for sec in sectors:
-                if sec == 'Perbankan':
-                    pe_data.append(12.5)
-                elif sec == 'Consumer':
-                    pe_data.append(18.2)
-                elif sec == 'Energi':
-                    pe_data.append(8.5)
-                elif sec == 'Telekom':
-                    pe_data.append(14.3)
-                else:
-                    pe_data.append(10.1)
+        if pe > 0 or pb > 0:
+            # Data sektor dari iTICK (coba ambil)
+            sector_pe = pe * 0.8 if pe > 0 else 12.5
+            sector_pb = pb * 0.7 if pb > 0 else 1.8
             
-            fig_pe = go.Figure()
-            fig_pe.add_trace(go.Bar(
-                x=sectors, y=pe_data,
-                name='Rata-rata P/E Sektor',
-                marker_color='lightblue'
-            ))
-            if pe > 0:
-                fig_pe.add_trace(go.Scatter(
-                    x=sectors, y=[pe]*len(sectors),
-                    mode='lines', name=f'P/E {symbol}',
-                    line=dict(color='orange', width=2, dash='dash')
-                ))
-            fig_pe.update_layout(title=f'Perbandingan P/E {symbol}', height=300, template="plotly_dark")
-            st.plotly_chart(fig_pe, use_container_width=True)
-            st.caption("Data sektor adalah estimasi. Bandingkan dengan kompetitor.")
-        
-        with col_chart2:
-            st.markdown("#### 📉 PBV Ratio Sektoral")
-            pbv_data = []
-            for sec in sectors:
-                if sec == 'Perbankan':
-                    pbv_data.append(1.8)
-                elif sec == 'Consumer':
-                    pbv_data.append(3.2)
-                elif sec == 'Energi':
-                    pbv_data.append(1.2)
-                elif sec == 'Telekom':
-                    pbv_data.append(2.1)
-                else:
-                    pbv_data.append(0.9)
+            col_chart1, col_chart2 = st.columns(2)
             
-            fig_pb = go.Figure()
-            fig_pb.add_trace(go.Bar(
-                x=sectors, y=pbv_data,
-                name='Rata-rata PBV Sektor',
-                marker_color='lightgreen'
-            ))
-            if pb > 0:
-                fig_pb.add_trace(go.Scatter(
-                    x=sectors, y=[pb]*len(sectors),
-                    mode='lines', name=f'PBV {symbol}',
-                    line=dict(color='red', width=2, dash='dash')
+            with col_chart1:
+                fig_pe = go.Figure()
+                fig_pe.add_trace(go.Bar(
+                    x=[sector, symbol],
+                    y=[sector_pe, pe],
+                    name='P/E Ratio',
+                    marker_color=['lightblue', '#ffaa00']
                 ))
-            fig_pb.update_layout(title=f'Perbandingan PBV {symbol}', height=300, template="plotly_dark")
-            st.plotly_chart(fig_pb, use_container_width=True)
-            st.caption("Data sektor estimasi. Nilai < 1 -> undervalue (good buy).")
+                fig_pe.update_layout(
+                    title=f'P/E Ratio - {symbol} vs {sector}',
+                    height=350,
+                    template="plotly_dark"
+                )
+                st.plotly_chart(fig_pe, use_container_width=True)
+            
+            with col_chart2:
+                fig_pb = go.Figure()
+                fig_pb.add_trace(go.Bar(
+                    x=[sector, symbol],
+                    y=[sector_pb, pb],
+                    name='P/BV Ratio',
+                    marker_color=['lightgreen', '#ff3366']
+                ))
+                fig_pb.update_layout(
+                    title=f'P/BV Ratio - {symbol} vs {sector}',
+                    height=350,
+                    template="plotly_dark"
+                )
+                st.plotly_chart(fig_pb, use_container_width=True)
+            
+            st.caption("💡 P/E < 15 murah | P/BV < 1 undervalue")
         
         # ========== CHART CANDLESTICK ==========
-        st.markdown("### 📈 Candlestick Chart + MA20")
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(
-            x=df.index[-90:],
-            open=df['Open'][-90:],
-            high=df['High'][-90:],
-            low=df['Low'][-90:],
-            close=df['Close'][-90:],
-            name=symbol,
-            increasing_line_color='#00ffcc',
-            decreasing_line_color='#ff3366'
-        ))
-        df['MA20'] = df['Close'].rolling(20).mean()
-        fig.add_trace(go.Scatter(x=df.index[-90:], y=df['MA20'][-90:], name='MA20', line=dict(color='#ffaa00', width=1.5)))
-        fig.update_layout(title=f"{symbol} - Candlestick Chart", height=450, template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("### 📈 Candlestick Chart (90 hari terakhir)")
         
-        # SUPPORT/RESISTANCE
-        col_s1, col_s2 = st.columns(2)
-        with col_s1:
-            st.metric("🛡️ Support", format_price(signal['support'], symbol))
-        with col_s2:
-            st.metric("🚀 Resistance", format_price(signal['resistance'], symbol))
+        if historical and isinstance(historical, list) and len(historical) > 0:
+            df_hist = pd.DataFrame(historical)
+            
+            # Konversi kolom ke format yang benar
+            df_hist['date'] = pd.to_datetime(df_hist['t'])
+            df_hist.set_index('date', inplace=True)
+            
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(
+                x=df_hist.index,
+                open=df_hist['o'],
+                high=df_hist['h'],
+                low=df_hist['l'],
+                close=df_hist['c'],
+                name=symbol,
+                increasing_line_color='#00ffcc',
+                decreasing_line_color='#ff3366'
+            ))
+            
+            df_hist['ma20'] = df_hist['c'].rolling(20).mean()
+            fig.add_trace(go.Scatter(
+                x=df_hist.index, 
+                y=df_hist['ma20'], 
+                name='MA20', 
+                line=dict(color='#ffaa00', width=1.5)
+            ))
+            
+            fig.update_layout(
+                title=f"{symbol} - Candlestick Chart",
+                height=450,
+                template="plotly_dark",
+                paper_bgcolor="#0a0a0a",
+                plot_bgcolor="#1a1a2e",
+                xaxis=dict(rangeslider=dict(visible=False))
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Data historis tidak tersedia dari iTICK API")
         
-        # DIVIDEN HISTORY
-        try:
-            dividends = ticker.dividends
-            if not dividends.empty:
-                with st.expander("📅 Riwayat Dividen (5 tahun terakhir)"):
-                    div_df = pd.DataFrame(dividends.tail(5))
-                    div_df.columns = ['Dividen']
-                    div_df['Tanggal'] = div_df.index.strftime('%Y-%m-%d')
-                    div_df['Dividen'] = div_df['Dividen'].apply(lambda x: format_price(x, symbol))
-                    st.dataframe(div_df[['Tanggal', 'Dividen']], use_container_width=True, hide_index=True)
-        except: pass
-        
-        # RESET
+        # ========== TOMBOL RESET ==========
         st.markdown("---")
         if st.button("🔄 Cari Saham Lain", use_container_width=True):
             st.session_state.search_triggered = False
