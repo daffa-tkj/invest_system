@@ -168,6 +168,8 @@ def render_tab2():
 
 def render_tab3():
     """Tab Prediksi - Dengan semua saham + Analisis Bandar (AK, BK, LG, HP, NI, RF)"""
+    from app.utils.config import ALL_STOCKS, FORECAST_STOCKS, ALL_KONGLOMERAT_GROUPS
+    
     st.subheader("🔮 Prediksi Harga 30 Hari + Analisis Bandar (Kode Broker)")
     
     # Build dropdown options
@@ -493,6 +495,8 @@ def render_tab3():
 
 def render_tab4():
     """Tab Search Saham + Grup Konglomerat"""
+    from app.utils.config import ALL_STOCKS, ALL_KONGLOMERAT_GROUPS
+    
     st.subheader("🔍 Cari Saham / Grup Konglomerat")
     
     search_options = []
@@ -662,6 +666,8 @@ def render_tab6():
 
 def render_tab7():
     """Tab khusus liat bandar - Pilih kode broker, lihat saham mana yang mereka akumulasi/distribusi"""
+    from app.utils.config import ALL_STOCKS
+    
     st.subheader("🦈 TRACKING BANDAR - CARI SAHAM YANG DIKONTROL BROKER")
     st.caption("""
     Pilih kode broker, sistem akan menampilkan saham-saham yang sedang diakumulasi (net buy) atau didistribusi (net sell) oleh broker tersebut.
