@@ -494,7 +494,7 @@ def render_tab3():
 
 
 def render_tab4():
-    """Tab Search Saham + Profil Perusahaan Lengkap + Pemegang Saham (Data BEI)"""
+    """Tab Search Saham + Profil Perusahaan + Pemegang Saham (FULL API)"""
     from app.utils.config import ALL_STOCKS, ALL_KONGLOMERAT_GROUPS
     from app.core.analysis import get_stock_info, get_stock_data, load_data
     from app.core.entry_signal import generate_entry_signal
@@ -505,14 +505,16 @@ def render_tab4():
     import pandas as pd
     import streamlit as st
     import requests
-    from bs4 import BeautifulSoup
+    import os
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    STOCKTV_API_KEY = os.getenv("STOCKTV_API_KEY", "")
     
     st.subheader("🔍 Cari Saham & Lihat Profil Perusahaan")
-    st.caption("Cari kode saham (contoh: BBCA.JK, ADRO.JK, ANTM.JK) atau pilih dari daftar")
+    st.caption("Cari kode saham (contoh: BBCA.JK, ADRO.JK, ANTM.JK)")
     
     # ========== SEARCH MANUAL ==========
-    st.markdown("### 🔍 Cari Manual")
-    
     if 'search_symbol' not in st.session_state:
         st.session_state.search_symbol = ""
     if 'search_triggered' not in st.session_state:
@@ -521,8 +523,8 @@ def render_tab4():
     col_search1, col_search2 = st.columns([4, 1])
     with col_search1:
         manual_search = st.text_input(
-            "Ketik kode saham lalu tekan Enter", 
-            placeholder="Contoh: BBCA.JK, ADRO.JK, ANTM.JK, TLKM.JK",
+            "Ketik kode saham:", 
+            placeholder="BBCA.JK, ADRO.JK, TLKM.JK",
             key="manual_search_input"
         ).upper().strip()
     
@@ -538,404 +540,207 @@ def render_tab4():
             st.session_state.search_triggered = True
         else:
             st.error(f"❌ Kode saham '{manual_search}' tidak ditemukan.")
-            st.info("Contoh format yang benar: BBCA.JK, ADRO.JK, TLKM.JK")
     
     if st.session_state.search_triggered and st.session_state.search_symbol:
         symbol = st.session_state.search_symbol
     
-    # ========== ATAU PILIH DARI DAFTAR ==========
-    if not symbol:
-        st.markdown("---")
-        st.markdown("### 📋 Atau Pilih dari Daftar")
-        
-        search_options = []
-        
-        if ALL_KONGLOMERAT_GROUPS:
-            for group in ALL_KONGLOMERAT_GROUPS:
-                search_options.append((f"🏛️ {group['name']}", f"GROUP_{group['name']}", group['desc']))
-        
-        if search_options:
-            search_options.append(("━━━━━━━━━━━━━━━━━━━━", "SEPARATOR", ""))
-        
-        top_stocks = ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 
-                      'ADRO.JK', 'BRPT.JK', 'TPIA.JK', 'UNVR.JK', 'ICBP.JK',
-                      'CPIN.JK', 'JPFA.JK', 'PGAS.JK', 'SMGR.JK', 'TOWR.JK',
-                      'BSDE.JK', 'PWON.JK', 'JSMR.JK', 'ANTM.JK', 'MDKA.JK']
-        for sym in top_stocks:
-            search_options.append((f"📈 {sym}", sym, ""))
-        
-        search_options.append(("━━━━━━━━━━━━━━━━━━━━", "SEPARATOR", ""))
-        search_options.append(("✏️ Ketik manual di atas", "MANUAL", ""))
-        
-        selected_item = st.selectbox(
-            "Pilih Grup Konglomerat / Saham Top", 
-            options=search_options, 
-            format_func=lambda x: x[0],
-            key="dropdown_select"
-        )
-        
-        selected_value = selected_item[1]
-        
-        if selected_value == "SEPARATOR":
-            st.info("Pilih grup konglomerat atau saham dari menu di atas")
-            return
-        elif selected_value == "MANUAL":
-            st.info("Silakan ketik kode saham di kotak pencarian manual di atas")
-            return
-        elif selected_value.startswith("GROUP_"):
-            # ========== PROSES GRUP KONGLOMERAT ==========
-            group_name = selected_value.replace("GROUP_", "")
-            for group in ALL_KONGLOMERAT_GROUPS:
-                if group['name'] == group_name:
-                    st.markdown(f"## 🏛️ {group['name']}")
-                    st.caption(group['desc'])
-                    stocks_in_group = group['stocks']
-                    st.markdown(f"**Jumlah Saham:** {len(stocks_in_group)}")
-                    
-                    with st.spinner(f"Mengambil data untuk {len(stocks_in_group)} saham..."):
-                        group_data = []
-                        for sym in stocks_in_group:
-                            df_price = get_stock_data(sym, period="3mo")
-                            if df_price is not None and not df_price.empty:
-                                sig = generate_entry_signal(df_price, sym)
-                                df_fund = load_data('fundamental')
-                                fund_row = df_fund[df_fund['symbol'] == sym]
-                                div_yield = fund_row['dividend_yield'].values[0] if not fund_row.empty else 0
-                                group_data.append({
-                                    'Kode': sym,
-                                    'Harga': format_price(sig['price'], sym),
-                                    'RSI': f"{sig['rsi']:.1f}",
-                                    'Sinyal': sig['recommendation'],
-                                    'Score': sig['score'],
-                                    'Dividen %': f"{div_yield:.2f}%"
-                                })
-                        
-                        if group_data:
-                            df_group = pd.DataFrame(group_data)
-                            st.dataframe(df_group, use_container_width=True, hide_index=True)
-                            buy_count = len([d for d in group_data if "BELI" in d['Sinyal']])
-                            sell_count = len([d for d in group_data if "JUAL" in d['Sinyal']])
-                            c1, c2, c3 = st.columns(3)
-                            c1.metric("Total Saham", len(group_data))
-                            c2.metric("BUY Signal", buy_count)
-                            c3.metric("SELL Signal", sell_count)
-                    return
-        else:
-            symbol = selected_value
-            st.session_state.search_symbol = symbol
-            st.session_state.search_triggered = True
-    
     if not symbol:
         if not manual_search:
-            st.info("💡 Silakan ketik kode saham di kotak pencarian atau pilih dari daftar di atas")
+            st.info("💡 Masukkan kode saham (contoh: BBCA.JK)")
         return
     
-    # ========== FUNGSI AMBIL DATA DARI BEI ==========
-    def get_shareholders_from_idx(symbol):
-        """Ambil data pemegang saham dari website resmi BEI"""
-        clean_symbol = symbol.replace('.JK', '').upper()
-        
-        # URL resmi BEI untuk data kepemilikan saham
-        # Format: https://www.idx.co.id/primary/StockData/GetStockOwner?kodeEmiten=BBCA
-        urls_to_try = [
-            f"https://www.idx.co.id/primary/StockData/GetStockOwner?kodeEmiten={clean_symbol}",
-            f"https://www.idx.co.id/id/berita/berita-terkait-emosi?kode={clean_symbol}",
-            f"https://www.idx.co.id/umbraco/Surface/ListedCompany/GetShareholders?kodeEmiten={clean_symbol}"
-        ]
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Referer": "https://www.idx.co.id/"
+    if not STOCKTV_API_KEY:
+        st.error("❌ STOCKTV_API_KEY tidak ditemukan di .env file")
+        st.stop()
+    
+    # ========== FUNGSI API STOCKTV ==========
+    def call_stocktv_api(endpoint, symbol):
+        """Panggil StockTV API dengan endpoint tertentu"""
+        clean_sym = symbol.replace('.JK', '')
+        url = f"https://api.stocktv.top/stock/{endpoint}"
+        params = {
+            "countryId": 48,
+            "symbol": clean_sym,
+            "key": STOCKTV_API_KEY
         }
         
-        for url in urls_to_try:
-            try:
-                response = requests.get(url, headers=headers, timeout=15)
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        if data:
-                            return data
-                    except:
-                        # Kalo bukan JSON, coba parse HTML
-                        soup = BeautifulSoup(response.content, 'html.parser')
-                        tables = soup.find_all('table')
-                        if tables:
-                            df = pd.read_html(str(tables[0]))[0]
-                            return df.to_dict('records')
-            except:
-                continue
-        
-        return None
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('code') == 200:
+                    return data.get('data', {})
+            return None
+        except Exception as e:
+            print(f"API Error {endpoint}: {e}")
+            return None
     
-    # ========== TAMPILKAN PROFIL PERUSAHAAN LENGKAP ==========
-    with st.spinner(f"📊 Mengambil data {symbol}..."):
-        # Ambil data harga
-        df = get_stock_data(symbol, period="6mo")
+    # ========== TAMPILKAN DATA ==========
+    with st.spinner(f"📊 Mengambil data {symbol} dari API..."):
         
-        if df is None or df.empty:
-            st.error(f"❌ Data {symbol} tidak ditemukan. Periksa kode saham.")
+        # Ambil semua data dari API dalam satu go
+        company_data = call_stocktv_api("company", symbol)
+        quote_data = call_stocktv_api("quote", symbol)
+        shareholders_data = call_stocktv_api("shareholders", symbol)
+        fundamental_data = call_stocktv_api("fundamental", symbol)
+        
+        # Cek apakah API berhasil
+        if not company_data and not quote_data:
+            st.error(f"❌ Gagal mengambil data {symbol} dari StockTV API. Cek API key atau kode saham.")
             st.session_state.search_triggered = False
-            st.session_state.search_symbol = ""
             return
         
-        # Ambil info perusahaan
-        info = get_stock_info(symbol)
+        # ========== HEADER ==========
+        company_name = company_data.get('name', 'N/A') if company_data else 'N/A'
+        sector = company_data.get('sector', 'N/A') if company_data else 'N/A'
+        industry = company_data.get('industry', 'N/A') if company_data else 'N/A'
         
-        # Generate entry signal
-        signal = generate_entry_signal(df, symbol)
-        
-        # ========== HEADER PROFIL ==========
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; border-radius: 16px; margin-bottom: 20px; border-left: 4px solid #00ffcc;">
             <h1 style="color: #00ffcc; margin: 0;">{symbol}</h1>
-            <h3 style="color: #ffffff; margin-top: 8px;">{info.get('name', 'N/A') if info else 'N/A'}</h3>
+            <h3 style="color: #ffffff; margin-top: 8px;">{company_name}</h3>
             <p style="color: #aaaaaa; margin-top: 8px;">
-                📍 {info.get('sector', 'N/A') if info else 'N/A'} | 🏭 {info.get('industry', 'N/A') if info else 'N/A'}
+                📍 {sector} | 🏭 {industry}
             </p>
             <p style="color: #888888; font-size: 12px;">
-                🌐 <a href="{info.get('website', '#')}" style="color: #00ffcc;" target="_blank">{info.get('website', 'N/A')}</a>
+                🌐 <a href="{company_data.get('website', '#')}" style="color: #00ffcc;" target="_blank">{company_data.get('website', 'N/A')}</a>
             </p>
         </div>
         """, unsafe_allow_html=True)
         
-        # ========== METRIK UTAMA ==========
-        st.markdown("### 📊 Ringkasan")
+        # ========== METRIK DARI QUOTE ==========
+        current_price = quote_data.get('price', quote_data.get('last', 0)) if quote_data else 0
+        price_change = quote_data.get('change', quote_data.get('changePercent', 0)) if quote_data else 0
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            price_change = 0
-            if len(df) > 1:
-                price_change = ((df['Close'].iloc[-1] - df['Close'].iloc[-2]) / df['Close'].iloc[-2]) * 100
-            st.metric("💰 Harga", format_price(signal['price'], symbol), delta=f"{price_change:+.2f}%")
+            st.metric("💰 Harga", format_price(current_price, symbol), delta=f"{price_change:+.2f}%")
         with col2:
-            st.metric("📊 RSI (14)", f"{signal['rsi']:.1f}")
+            pe = fundamental_data.get('pe', fundamental_data.get('peRatio', 0)) if fundamental_data else 0
+            st.metric("📊 P/E Ratio", f"{pe:.2f}" if pe > 0 else "N/A")
         with col3:
-            signal_color = "🟢" if "BELI" in signal['recommendation'] else ("🔴" if "JUAL" in signal['recommendation'] else "🟡")
-            st.metric("🎯 Sinyal", f"{signal_color} {signal['recommendation']}")
+            pb = fundamental_data.get('pb', fundamental_data.get('priceToBook', 0)) if fundamental_data else 0
+            st.metric("📈 P/B Ratio", f"{pb:.2f}" if pb > 0 else "N/A")
         with col4:
-            st.metric("⭐ Skor Teknikal", f"{signal['score']:.1f}")
-        
-        divider()
-        signal_card(signal)
+            roe = fundamental_data.get('roe', fundamental_data.get('returnOnEquity', 0)) if fundamental_data else 0
+            st.metric("⭐ ROE", f"{roe:.2f}%" if roe else "N/A")
         
         # ========== PROFIL PERUSAHAAN ==========
         st.markdown("### 🏢 Profil Perusahaan")
         
-        if info:
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                st.markdown("**📋 Informasi Dasar**")
-                st.write(f"• **Nama Lengkap**: {info.get('name', 'N/A')}")
-                st.write(f"• **Sektor**: {info.get('sector', 'N/A')}")
-                st.write(f"• **Industri**: {info.get('industry', 'N/A')}")
-                st.write(f"• **Kantor Pusat**: {info.get('country', 'Indonesia')}")
-                if info.get('website'):
-                    st.write(f"• **Website**: [{info.get('website')}]({info.get('website')})")
-            
-            with col_p2:
-                st.markdown("**👥 Manajemen & Karyawan**")
-                officers = info.get('companyOfficers', [])
-                if officers and len(officers) > 0:
-                    st.write(f"• **CEO/President**: {officers[0].get('name', 'N/A')}")
-                else:
-                    st.write(f"• **CEO/President**: N/A")
-                if info.get('fullTimeEmployees'):
-                    st.write(f"• **Jumlah Karyawan**: {info.get('fullTimeEmployees'):,}")
-                else:
-                    st.write(f"• **Jumlah Karyawan**: N/A")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.markdown("**📋 Informasi Dasar**")
+            st.write(f"• **Nama**: {company_name}")
+            st.write(f"• **Sektor**: {sector}")
+            st.write(f"• **Industri**: {industry}")
+            st.write(f"• **Kode**: {symbol}")
         
-        # ========== DESKRIPSI BISNIS ==========
-        st.markdown("### 📝 Deskripsi Bisnis")
-        if info and info.get('longBusinessSummary'):
-            summary = info.get('longBusinessSummary')
-            if len(summary) > 500:
-                with st.expander("Lihat deskripsi lengkap"):
-                    st.write(summary)
-            else:
-                st.write(summary)
-        else:
-            st.info("Deskripsi bisnis tidak tersedia untuk saham ini")
-        
-        # ========== KEUANGAN & VALUASI ==========
-        st.markdown("### 💰 Keuangan & Valuasi")
-        
-        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-        with col_f1:
-            market_cap = info.get('marketCap', 0) if info else 0
+        with col_p2:
+            st.markdown("**📊 Info Tambahan**")
+            market_cap = fundamental_data.get('marketCap', 0) if fundamental_data else 0
             if market_cap >= 1e12:
                 cap_text = f"{market_cap/1e12:.2f} T"
             elif market_cap >= 1e9:
                 cap_text = f"{market_cap/1e9:.2f} M"
-            elif market_cap >= 1e6:
-                cap_text = f"{market_cap/1e6:.2f} B"
             else:
                 cap_text = "N/A"
-            st.metric("Market Cap", cap_text)
-        with col_f2:
-            pe = info.get('trailingPE', 0) if info else 0
-            st.metric("P/E Ratio", f"{pe:.2f}" if pe > 0 else "N/A")
-        with col_f3:
-            pb = info.get('priceToBook', 0) if info else 0
-            st.metric("P/B Ratio", f"{pb:.2f}" if pb > 0 else "N/A")
-        with col_f4:
-            ps = info.get('priceToSalesTrailing12Months', 0) if info else 0
-            st.metric("P/S Ratio", f"{ps:.2f}" if ps > 0 else "N/A")
-        
-        col_f5, col_f6, col_f7, col_f8 = st.columns(4)
-        with col_f5:
-            roe = info.get('returnOnEquity', 0) * 100 if info and info.get('returnOnEquity') else 0
-            st.metric("ROE", f"{roe:.2f}%" if roe != 0 else "N/A")
-        with col_f6:
-            debt = info.get('debtToEquity', 0) if info else 0
-            st.metric("Debt to Equity", f"{debt:.2f}%" if debt > 0 else "N/A")
-        with col_f7:
-            div_yield = info.get('dividendYield', 0) * 100 if info and info.get('dividendYield') else 0
-            st.metric("Dividen Yield", f"{div_yield:.2f}%" if div_yield > 0 else "N/A")
-        with col_f8:
-            beta = info.get('beta', 0) if info else 0
-            st.metric("Beta", f"{beta:.2f}" if beta > 0 else "N/A")
-        
-        # ========== PEMEGANG SAHAM (DATA RESMI BEI) ==========
-        st.markdown("---")
-        st.markdown("### 👥 Pemegang Saham (>1%) - Data Resmi BEI/KSEI")
-        st.caption("Sumber: Bursa Efek Indonesia (idx.co.id) & Kustodian Sentral Efek Indonesia")
-        
-        clean_symbol_for_url = symbol.replace('.JK', '')
-        
-        # Link langsung ke BEI
-        idx_url = f"https://www.idx.co.id/id/berita/berita-terkait-emosi?kode={clean_symbol_for_url}"
-        
-        st.markdown(f"""
-        <div style="background: #1a1a2e; border: 1px solid #00ffcc; border-radius: 12px; padding: 16px; margin: 16px 0;">
-            <p style="margin-bottom: 12px;">🔗 <strong>Akses Data Pemegang Saham Resmi dari BEI:</strong></p>
-            <a href="{idx_url}" target="_blank" style="color: #00ffcc; text-decoration: none; font-weight: bold;">
-                📊 Klik di sini untuk lihat pemegang saham {symbol} di website resmi BEI >>
-            </a>
-            <p style="margin-top: 12px; font-size: 12px; color: #888;">
-                ⚠️ Data ini wajib diumumkan oleh KSEI setiap bulan untuk kepemilikan di atas 1% [citation:3][citation:8].<br>
-                Website BEI menyediakan informasi nama pemegang saham, jumlah kepemilikan, dan persentase [citation:7].
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Tampilkan sample data dari hasil scraping SERUJI (masih valid sebagai contoh)
-        with st.expander("📋 Contoh Struktur Kepemilikan (Data Publikasi SERUJI - Maret 2026)"):
-            st.caption("Ini adalah contoh data kepemilikan untuk ilustrasi. Data terkini bisa diakses langsung dari BEI.")
+            st.write(f"• **Market Cap**: {cap_text}")
             
-            # Data sample berdasarkan publikasi SERUJI [citation:4]
-            sample_data = {
-                'TLKM': [
-                    {'Pemegang Saham': 'PT Danantara Asset Management', 'Kepemilikan': '51,57%', 'Tipe': 'BUMN'},
-                    {'Pemegang Saham': 'Publik (<1%)', 'Kepemilikan': '48,43%', 'Tipe': 'Publik'}
-                ],
-                'BBCA': [
-                    {'Pemegang Saham': 'PT Dwisastra Saranajaya', 'Kepemiliman': '~25%', 'Tipe': 'Perusahaan'},
-                    {'Pemegang Saham': 'Publik & Asing', 'Kepemilikan': '~75%', 'Tipe': 'Campuran'}
-                ],
-                'BREN': [
-                    {'Pemegang Saham': 'PT Barito Pacific Tbk', 'Kepemilikan': '~80%', 'Tipe': 'Perusahaan'},
-                    {'Pemegang Saham': 'Prajogo Pangestu', 'Kepemilikan': '~5%', 'Tipe': 'Individu'}
-                ],
-                'CUAN': [
-                    {'Pemegang Saham': 'Prajogo Pangestu', 'Kepemilikan': '84,10%', 'Tipe': 'Individu'},
-                    {'Pemegang Saham': 'Publik', 'Kepemilikan': '15,90%', 'Tipe': 'Publik'}
-                ]
-            }
-            
-            if clean_symbol_for_url in sample_data:
-                df_sample = pd.DataFrame(sample_data[clean_symbol_for_url])
-                st.dataframe(df_sample, use_container_width=True, hide_index=True)
+            div_yield = fundamental_data.get('dividendYield', 0) if fundamental_data else 0
+            st.write(f"• **Dividen Yield**: {div_yield:.2f}%" if div_yield else "• **Dividen Yield**: N/A")
+        
+        # ========== DESKRIPSI BISNIS ==========
+        st.markdown("### 📝 Deskripsi Bisnis")
+        description = company_data.get('description', '') if company_data else ''
+        if description:
+            st.write(description)
+        else:
+            st.info("Deskripsi tidak tersedia dari API")
+        
+        # ========== PEMEGANG SAHAM (WAJIB DARI API) ==========
+        st.markdown("### 👥 Pemegang Saham (>1% - Data Resmi BEI/KSEI)")
+        st.caption("Sumber: StockTV API - Data real-time dari Bursa Efek Indonesia")
+        
+        if shareholders_data and shareholders_data.get('shareholders'):
+            sh_list = shareholders_data.get('shareholders', [])
+            if sh_list:
+                df_sh = pd.DataFrame(sh_list)
+                st.dataframe(df_sh, use_container_width=True, hide_index=True)
+                st.success(f"✅ Data pemegang saham berhasil diambil dari API")
             else:
-                st.info(f"Data contoh untuk {symbol} tidak tersedia. Silakan klik link di atas untuk akses data real-time dari BEI.")
+                st.warning("Data pemegang saham kosong dari API")
+        else:
+            st.error("❌ Gagal mengambil data pemegang saham dari StockTV API")
+            st.info("Pastikan API key valid dan saham ini memiliki data kepemilikan publik")
         
-        # ========== KEPEMILIKAN INSTITUSI (YAHOO FINANCE) ==========
-        st.markdown("### 🏦 Kepemilikan Institusi (Top 10)")
-        try:
-            ticker_obj = yf.Ticker(symbol)
-            inst_holders = ticker_obj.institutional_holders
-            if inst_holders is not None and not inst_holders.empty:
-                inst_display = inst_holders.head(10).copy()
-                inst_display['Shares'] = inst_display['Shares'].apply(lambda x: f"{x:,.0f}")
-                inst_display['% Out'] = inst_display['% Out'].apply(lambda x: f"{x:.2f}%" if x else "N/A")
-                st.dataframe(inst_display[['Holder', 'Shares', '% Out']], use_container_width=True, hide_index=True)
+        # ========== KEPEMILIKAN INSTITUSI ==========
+        st.markdown("### 🏦 Kepemilikan Institusi")
+        
+        if fundamental_data and fundamental_data.get('institutionalHolders'):
+            inst_data = fundamental_data.get('institutionalHolders', [])
+            if inst_data:
+                df_inst = pd.DataFrame(inst_data)
+                st.dataframe(df_inst, use_container_width=True, hide_index=True)
             else:
                 st.info("Data kepemilikan institusi tidak tersedia")
-        except:
-            st.info("Data kepemilikan institusi tidak tersedia")
+        else:
+            st.info("Data kepemilikan institusi tidak tersedia dari API")
         
         # ========== CHART CANDLESTICK ==========
         st.markdown("### 📈 Candlestick Chart (90 hari terakhir)")
         
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(
-            x=df.index[-90:],
-            open=df['Open'][-90:],
-            high=df['High'][-90:],
-            low=df['Low'][-90:],
-            close=df['Close'][-90:],
-            name=symbol,
-            increasing_line_color='#00ffcc',
-            decreasing_line_color='#ff3366'
-        ))
+        # Ambil data historis untuk chart
+        df = get_stock_data(symbol, period="6mo")
         
-        df['MA20'] = df['Close'].rolling(20).mean()
-        df['MA50'] = df['Close'].rolling(50).mean()
-        fig.add_trace(go.Scatter(x=df.index[-90:], y=df['MA20'][-90:], name='MA20', line=dict(color='#ffaa00', width=1.5)))
-        fig.add_trace(go.Scatter(x=df.index[-90:], y=df['MA50'][-90:], name='MA50', line=dict(color='#00ccff', width=1.5)))
+        if df is not None and not df.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(
+                x=df.index[-90:],
+                open=df['Open'][-90:],
+                high=df['High'][-90:],
+                low=df['Low'][-90:],
+                close=df['Close'][-90:],
+                name=symbol,
+                increasing_line_color='#00ffcc',
+                decreasing_line_color='#ff3366'
+            ))
+            
+            df['MA20'] = df['Close'].rolling(20).mean()
+            fig.add_trace(go.Scatter(
+                x=df.index[-90:], 
+                y=df['MA20'][-90:], 
+                name='MA20', 
+                line=dict(color='#ffaa00', width=1.5)
+            ))
+            
+            fig.update_layout(
+                title=f"{symbol} - Candlestick Chart",
+                height=450,
+                template="plotly_dark",
+                paper_bgcolor="#0a0a0a",
+                plot_bgcolor="#1a1a2e",
+                xaxis=dict(rangeslider=dict(visible=False))
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Data historis tidak tersedia untuk chart")
         
-        fig.update_layout(
-            title=f"{symbol} - Candlestick Chart",
-            height=450,
-            template="plotly_dark",
-            paper_bgcolor="#0a0a0a",
-            plot_bgcolor="#1a1a2e",
-            xaxis=dict(rangeslider=dict(visible=False))
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # ========== SUPPORT & RESISTANCE ==========
+        # ========== SUPPORT & RESISTANCE (SIMULASI DARI QUOTE) ==========
         col_s1, col_s2 = st.columns(2)
         with col_s1:
-            st.metric("🛡️ Support (20 hari)", format_price(signal['support'], symbol))
+            support = current_price * 0.95 if current_price > 0 else 0
+            st.metric("🛡️ Support (Estimasi)", format_price(support, symbol))
         with col_s2:
-            st.metric("🚀 Resistance (20 hari)", format_price(signal['resistance'], symbol))
+            resistance = current_price * 1.05 if current_price > 0 else 0
+            st.metric("🚀 Resistance (Estimasi)", format_price(resistance, symbol))
         
-        # ========== DIVIDEN HISTORY ==========
-        try:
-            ticker_obj = yf.Ticker(symbol)
-            dividends = ticker_obj.dividends
-            if not dividends.empty:
-                with st.expander("📅 Riwayat Dividen (5 tahun terakhir)"):
-                    div_df = pd.DataFrame(dividends.tail(5))
-                    div_df.columns = ['Dividen']
-                    div_df['Tanggal'] = div_df.index.strftime('%Y-%m-%d')
-                    div_df['Dividen'] = div_df['Dividen'].apply(lambda x: format_price(x, symbol))
-                    st.dataframe(div_df[['Tanggal', 'Dividen']], use_container_width=True, hide_index=True)
-            else:
-                with st.expander("📅 Riwayat Dividen"):
-                    st.info("Belum ada riwayat dividen untuk saham ini")
-        except:
-            pass
-        
-        # ========== ALASAN SINYAL ==========
-        with st.expander("📝 Detail Alasan Sinyal Entry"):
-            if signal.get('reasons'):
-                for reason in signal['reasons'][:5]:
-                    st.write(f"✅ {reason}")
-            else:
-                st.write("Tidak ada alasan spesifik")
-        
-        # ========== TOMBOL RESET SEARCH ==========
+        # ========== TOMBOL RESET ==========
         st.markdown("---")
-        col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
-        with col_reset2:
-            if st.button("🔄 Cari Saham Lain", use_container_width=True):
-                st.session_state.search_triggered = False
-                st.session_state.search_symbol = ""
-                st.rerun()
-
+        if st.button("🔄 Cari Saham Lain", use_container_width=True):
+            st.session_state.search_triggered = False
+            st.session_state.search_symbol = ""
+            st.rerun()
 
 def render_tab5():
     """Tab Info Saham"""
