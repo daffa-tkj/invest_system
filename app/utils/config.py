@@ -59,6 +59,9 @@ MICRO_CAP_STOCKS = [
 # === GABUNGAN SEMUA SAHAM ===
 ALL_STOCKS = LARGE_CAP_STOCKS + MID_CAP_STOCKS + SMALL_CAP_STOCKS + MICRO_CAP_STOCKS
 
+# ========== BACKWARD COMPATIBLE ==========
+STOCKS = ALL_STOCKS  # Untuk file lama yang masih panggil STOCKS
+
 # ========== SAHAM BERDASARKAN SEKTOR ==========
 
 # Perbankan
