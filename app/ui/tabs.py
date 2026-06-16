@@ -166,8 +166,6 @@ def render_tab2():
                 st.write(f"🔍 {p}")
 
 
-# app/ui/tabs.py - FULL render_tab3() LENGKAP + SEARCH MANUAL
-
 def render_tab3():
     """Tab Prediksi - Dengan semua saham + Analisis Bandar (Semua Broker Asing + Lokal) + DOM"""
     from app.utils.config import ALL_STOCKS, FORECAST_STOCKS, ALL_KONGLOMERAT_GROUPS
@@ -179,152 +177,48 @@ def render_tab3():
     
     st.subheader("🔮 Prediksi Harga 30 Hari + Analisis Bandar (Semua Broker)")
     
-    # ========== SEARCH MANUAL + DROPDOWN (Seperti Tab 4) ==========
-    st.markdown("### 🔍 Cari Manual")
+    # Build dropdown options
+    dropdown_options = []
     
-    # Initial session state untuk search
-    if 'tab3_search_symbol' not in st.session_state:
-        st.session_state.tab3_search_symbol = ""
-    if 'tab3_search_triggered' not in st.session_state:
-        st.session_state.tab3_search_triggered = False
+    # Emas
+    dropdown_options.append(("🥇 GOLD", "GOLD"))
     
-    # Form search
-    col_left, col_mid, col_right = st.columns([1, 6, 1])
+    # Kategori konglomerat
+    if ALL_KONGLOMERAT_GROUPS:
+        dropdown_options.append(("━━━ KONGLOMERAT ━━━", "SEPARATOR"))
+        for group in ALL_KONGLOMERAT_GROUPS:
+            dropdown_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}"))
     
-    with col_mid:
-        with st.form(key="tab3_search_form", clear_on_submit=False):
-            col_input, col_button = st.columns([4, 1])
-            with col_input:
-                search_input = st.text_input(
-                    "Ketik kode saham (contoh: BBCA.JK, ADRO.JK, ANTM.JK)", 
-                    placeholder="Masukkan kode saham...",
-                    key="tab3_form_search_input",
-                    label_visibility="collapsed"
-                ).upper().strip()
-            
-            with col_button:
-                submitted = st.form_submit_button("🔍 CARI", type="primary", use_container_width=True)
+    dropdown_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR"))
+    valid_stocks = [s for s in ALL_STOCKS if '.JK' in s]
+    for sym in valid_stocks[:100]:
+        dropdown_options.append((f"📊 {sym}", sym))
     
-    # Proses search dari form
-    if submitted and search_input:
-        if search_input in ALL_STOCKS or search_input.endswith('.JK'):
-            st.session_state.tab3_search_symbol = search_input
-            st.session_state.tab3_search_triggered = True
-            st.rerun()
-        else:
-            st.error(f"❌ Kode saham '{search_input}' tidak ditemukan. Gunakan format seperti BBCA.JK, ADRO.JK, ANTM.JK")
+    selected_label, selected_value = st.selectbox(
+        "Pilih Aset / Grup Konglomerat",
+        options=dropdown_options,
+        format_func=lambda x: x[0]
+    )
     
-    # Reset jika tidak ada input
-    if not search_input and not st.session_state.tab3_search_triggered:
-        st.session_state.tab3_search_symbol = ""
-    
-    # Gunakan dari session state
-    symbol_from_search = st.session_state.tab3_search_symbol if st.session_state.tab3_search_triggered else None
-    
-    # ========== ATAU PILIH DARI DAFTAR ==========
-    if not symbol_from_search:
-        st.markdown("---")
-        st.markdown("### 📋 Atau Pilih dari Daftar")
-        
-        col_opt_left, col_opt_mid, col_opt_right = st.columns([1, 4, 1])
-        with col_opt_mid:
-            search_options = []
-            
-            # Emas
-            search_options.append(("🥇 GOLD", "GOLD", "Emas"))
-            
-            # Grup konglomerat
-            if ALL_KONGLOMERAT_GROUPS:
-                search_options.append(("━━━ KONGLOMERAT ━━━", "SEPARATOR", ""))
-                for group in ALL_KONGLOMERAT_GROUPS:
-                    search_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}", group['desc']))
-            
-            # Saham top
-            if ALL_KONGLOMERAT_GROUPS:
-                search_options.append(("━━━ SAHAM TOP ━━━", "SEPARATOR", ""))
-            
-            top_stocks = ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 
-                          'ADRO.JK', 'BRPT.JK', 'TPIA.JK', 'UNVR.JK', 'ICBP.JK',
-                          'CPIN.JK', 'JPFA.JK', 'PGAS.JK', 'SMGR.JK', 'TOWR.JK',
-                          'BSDE.JK', 'PWON.JK', 'JSMR.JK', 'ANTM.JK', 'MDKA.JK']
-            for sym in top_stocks:
-                search_options.append((f"📈 {sym}", sym, ""))
-            
-            search_options.append(("━━━ SEMUA SAHAM ━━━", "SEPARATOR", ""))
-            
-            # Semua saham (diurutkan)
-            all_stocks_sorted = sorted([s for s in ALL_STOCKS if '.JK' in s])
-            for sym in all_stocks_sorted[:200]:
-                search_options.append((f"📊 {sym}", sym, ""))
-            
-            selected_item = st.selectbox(
-                "Pilih Aset / Grup Konglomerat / Saham", 
-                options=search_options, 
-                format_func=lambda x: x[0],
-                key="tab3_dropdown_select",
-                label_visibility="collapsed"
-            )
-            
-            selected_value = selected_item[1] if selected_item else None
-            
-            if selected_value == "SEPARATOR":
-                st.info("Pilih aset dari menu di atas")
-                return
-            elif selected_value == "GOLD":
-                symbol = "GOLD"
-                st.session_state.tab3_search_symbol = "GOLD"
-                st.session_state.tab3_search_triggered = True
-            elif selected_value and selected_value.startswith("GROUP_"):
-                group_name = selected_value.replace("GROUP_", "")
-                selected_value = f"GROUP_{group_name}"
-                st.session_state.tab3_search_symbol = selected_value
-                st.session_state.tab3_search_triggered = True
-            elif selected_value:
-                symbol = selected_value
-                st.session_state.tab3_search_symbol = symbol
-                st.session_state.tab3_search_triggered = True
-                st.rerun()
-    
-    # ========== TENTUKAN SYMBOL / GROUP ==========
-    symbol = None
-    selected_value = None
-    
-    # Cek dari session state
-    if st.session_state.tab3_search_triggered:
-        search_val = st.session_state.tab3_search_symbol
-        if search_val and search_val.startswith("GROUP_"):
-            selected_value = search_val
-        elif search_val and search_val != "":
-            symbol = search_val
-    
-    # Jika masih belum ada, cek dari dropdown
-    if not symbol and not selected_value:
-        st.info("💡 Silakan ketik kode saham di kotak pencarian atau pilih dari daftar di atas")
+    if selected_value == "SEPARATOR":
+        st.info("Pilih aset dari menu di atas")
         return
     
     # Tentukan list saham
     stock_list = []
-    display_name = ""
-    
-    if selected_value and selected_value.startswith("GROUP_"):
+    if selected_value == "GOLD":
+        stock_list = ["GOLD"]
+        display_name = "Emas (XAU/USD)"
+    elif selected_value.startswith("GROUP_"):
         group_name = selected_value.replace("GROUP_", "")
         for group in ALL_KONGLOMERAT_GROUPS:
             if group['name'] == group_name:
                 stock_list = group['stocks']
                 display_name = f"{group['name']} ({len(stock_list)} saham)"
                 break
-        if not stock_list:
-            st.error(f"Grup '{group_name}' tidak ditemukan")
-            return
-    elif symbol == "GOLD":
-        stock_list = ["GOLD"]
-        display_name = "Emas (XAU/USD)"
-    elif symbol:
-        stock_list = [symbol]
-        display_name = symbol
     else:
-        st.info("💡 Silakan ketik kode saham di kotak pencarian atau pilih dari daftar")
-        return
+        stock_list = [selected_value]
+        display_name = selected_value
     
     st.info(f"📊 Menampilkan: **{display_name}** - {len(stock_list)} aset")
     
@@ -1492,7 +1386,6 @@ def render_tab3():
                                 barmode='relative'
                             )
                             st.plotly_chart(fig_dom, use_container_width=True)
-
 
 def render_tab4():
     """Tab Search Saham + Profil Perusahaan Lengkap"""
