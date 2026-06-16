@@ -177,56 +177,72 @@ def render_tab3():
     
     st.subheader("🔮 Prediksi Harga 30 Hari + Analisis Bandar (Semua Broker)")
     
-    # Build dropdown options
-    dropdown_options = []
+    # ========== DROPDOWN PILIHAN ==========
+    options = []
+    options.append("🥇 GOLD")
     
-    # Emas
-    dropdown_options.append(("🥇 GOLD", "GOLD"))
-    
-    # Kategori konglomerat
     if ALL_KONGLOMERAT_GROUPS:
-        dropdown_options.append(("━━━ KONGLOMERAT ━━━", "SEPARATOR"))
+        options.append("━━━ KONGLOMERAT ━━━")
         for group in ALL_KONGLOMERAT_GROUPS:
-            dropdown_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}"))
+            options.append(f"🏢 {group['name']}")
     
-    dropdown_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR"))
-    valid_stocks = [s for s in ALL_STOCKS if '.JK' in s]
-    for sym in valid_stocks[:100]:
-        dropdown_options.append((f"📊 {sym}", sym))
+    options.append("━━━ SAHAM TOP ━━━")
+    top_stocks = ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 
+                  'ADRO.JK', 'BRPT.JK', 'TPIA.JK', 'UNVR.JK', 'ICBP.JK',
+                  'CPIN.JK', 'JPFA.JK', 'PGAS.JK', 'SMGR.JK', 'TOWR.JK',
+                  'BSDE.JK', 'PWON.JK', 'JSMR.JK', 'ANTM.JK', 'MDKA.JK']
+    for sym in top_stocks:
+        options.append(f"📈 {sym}")
     
-    selected_label, selected_value = st.selectbox(
-        "Pilih Aset / Grup Konglomerat",
-        options=dropdown_options,
-        format_func=lambda x: x[0]
-    )
+    options.append("━━━ SEMUA SAHAM ━━━")
+    all_stocks_sorted = sorted([s for s in ALL_STOCKS if '.JK' in s])
+    for sym in all_stocks_sorted[:150]:
+        options.append(f"📊 {sym}")
     
-    if selected_value == "SEPARATOR":
-        st.info("Pilih aset dari menu di atas")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        selected = st.selectbox("Pilih Aset / Grup / Saham", options=options, key="tab3_select")
+    with col2:
+        st.write("")
+        st.write("")
+        manual_input = st.text_input("Atau ketik kode", placeholder="BBCA.JK", key="tab3_manual").upper().strip()
+        if manual_input and manual_input in ALL_STOCKS:
+            selected = f"📊 {manual_input}"
+    
+    if selected.startswith("━━━"):
+        st.info("Silakan pilih aset dari menu di atas")
         return
     
     # Tentukan list saham
     stock_list = []
-    if selected_value == "GOLD":
+    display_name = ""
+    
+    if selected == "🥇 GOLD":
         stock_list = ["GOLD"]
         display_name = "Emas (XAU/USD)"
-    elif selected_value.startswith("GROUP_"):
-        group_name = selected_value.replace("GROUP_", "")
+    elif selected.startswith("🏢 "):
+        group_name = selected.replace("🏢 ", "")
         for group in ALL_KONGLOMERAT_GROUPS:
             if group['name'] == group_name:
                 stock_list = group['stocks']
                 display_name = f"{group['name']} ({len(stock_list)} saham)"
                 break
-    else:
-        stock_list = [selected_value]
-        display_name = selected_value
+    elif selected.startswith("📈 ") or selected.startswith("📊 "):
+        symbol = selected.split(" ")[1]
+        stock_list = [symbol]
+        display_name = symbol
     
-    st.info(f"📊 Menampilkan: **{display_name}** - {len(stock_list)} aset")
+    if not stock_list:
+        st.warning("Tidak ada saham yang dipilih")
+        return
     
-    # ========== UNTUK SAHAM TUNGGAL (BUKAN GOLD) ==========
+    st.info(f"📊 Menampilkan: **{display_name}**")
+    
+    # ========== SAHAM TUNGGAL ==========
     if len(stock_list) == 1 and stock_list[0] != "GOLD":
         symbol = stock_list[0]
         
-        with st.spinner(f"Mengambil data {symbol} dan analisis bandar..."):
+        with st.spinner(f"Mengambil data {symbol}..."):
             df_hist = get_stock_data(symbol, period="3mo")
             currency, _ = get_currency(symbol)
             price_label = "Rp" if currency == "IDR" else "$"
@@ -235,11 +251,9 @@ def render_tab3():
                 st.error("Gagal mengambil data")
                 return
             
-            # Ambil data institusi/bandar
             inst_data = get_institutional_holders(symbol)
             foreign_data = get_foreign_flow_summary(symbol)
             broker_df = get_realtime_broker_summary(symbol)
-            broker_net = get_broker_net_summary(symbol)
             
             hist_price = df_hist['Close']
             pred_values = exponential_smoothing(hist_price, forecast_days=30)
@@ -248,12 +262,12 @@ def render_tab3():
             last_pred = pred_values[-1]
             pct_change = ((last_pred - current_price) / current_price) * 100
             
-            # ========== 1. METRIK UTAMA ==========
+            # ========== 1. METRIK ==========
             col1, col2 = st.columns(2)
             col1.metric("Harga Saat Ini", f"{price_label}{current_price:,.2f}".replace(',', '.'))
             col2.metric("Prediksi 30 Hari", f"{price_label}{last_pred:,.2f}".replace(',', '.'), delta=f"{pct_change:+.1f}%")
             
-            # ========== 2. CHART PREDIKSI ==========
+            # ========== 2. CHART ==========
             future_dates = [datetime.now() + timedelta(days=i+1) for i in range(30)]
             
             fig = go.Figure()
@@ -275,7 +289,7 @@ def render_tab3():
             fig.add_hline(y=resistance, line_dash="dash", line_color="red", annotation_text=f"Resistance {resistance:.2f}")
             
             fig.update_layout(
-                title=f"{symbol} - 30 Day Forecast dengan Support/Resistance",
+                title=f"{symbol} - 30 Day Forecast",
                 height=450,
                 template="plotly_dark",
                 paper_bgcolor="#0a0a0a",
@@ -283,110 +297,95 @@ def render_tab3():
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # =====================================================
-            # ========== 3. TRADE FLOW (DIPERBESAR) ==========
-            # =====================================================
+            # ========== 3. TRADE FLOW ==========
             st.divider()
             st.subheader("🌊 Trade Flow - Aliran Dana Asing vs Domestik")
             
             if foreign_data:
-                col_flow1, col_flow2 = st.columns([1, 1])
+                foreign_pct = foreign_data.get('estimated_foreign_percent', 50)
+                domestic_pct = foreign_data.get('estimated_domestic_percent', 50)
+                insider_pct = foreign_data.get('insider_percent', 0)
                 
-                with col_flow1:
-                    st.markdown("#### 📊 Komposisi Kepemilikan")
-                    
+                total = foreign_pct + domestic_pct + insider_pct
+                if total > 0:
+                    foreign_pct = (foreign_pct / total) * 100
+                    domestic_pct = (domestic_pct / total) * 100
+                    insider_pct = (insider_pct / total) * 100
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
                     fig_flow = go.Figure(data=[go.Pie(
                         labels=['🌍 Asing', '🇮🇩 Domestik', '👔 Insider'],
-                        values=[
-                            foreign_data['estimated_foreign_percent'],
-                            foreign_data['estimated_domestic_percent'],
-                            foreign_data['insider_percent']
-                        ],
+                        values=[foreign_pct, domestic_pct, insider_pct],
                         hole=.5,
                         marker_colors=['#00ffcc', '#ff3366', '#ffaa00'],
                         textinfo='label+percent',
-                        textposition='inside',
-                        textfont=dict(size=14, color='white'),
-                        pull=[0.05, 0.05, 0.05],
-                        rotation=90
+                        textposition='inside'
                     )])
                     fig_flow.update_layout(
-                        title="<b>Kepemilikan Saham</b>",
-                        height=400,
-                        width=500,
+                        title="Komposisi Kepemilikan",
+                        height=350,
                         template="plotly_dark",
                         paper_bgcolor="#0a0a0a",
-                        plot_bgcolor="#1a1a2e",
-                        font=dict(size=14),
-                        showlegend=True,
-                        legend=dict(
-                            orientation="h",
-                            yanchor="bottom",
-                            y=-0.1,
-                            xanchor="center",
-                            x=0.5
-                        )
+                        plot_bgcolor="#1a1a2e"
                     )
                     st.plotly_chart(fig_flow, use_container_width=True)
                 
-                with col_flow2:
-                    st.markdown("#### 📈 Metrik Aliran Dana")
-                    
+                with col2:
                     st.markdown(f"""
-                    <div style="background: #1a1a2e; padding: 20px; border-radius: 12px; border: 1px solid #00ffcc; margin-bottom: 10px;">
+                    <div style="background: #1a1a2e; padding: 20px; border-radius: 12px; border: 1px solid #00ffcc;">
                         <div style="display: flex; justify-content: space-between; padding: 8px 0;">
-                            <span style="color: #00ffcc;">🌍 Kepemilikan Asing</span>
-                            <span style="color: #00ffcc; font-weight: bold; font-size: 20px;">{foreign_data['estimated_foreign_percent']:.1f}%</span>
+                            <span style="color: #00ffcc;">🌍 Asing</span>
+                            <span style="color: #00ffcc; font-weight: bold; font-size: 18px;">{foreign_pct:.1f}%</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid #333;">
-                            <span style="color: #ff3366;">🇮🇩 Kepemilikan Domestik</span>
-                            <span style="color: #ff3366; font-weight: bold; font-size: 20px;">{foreign_data['estimated_domestic_percent']:.1f}%</span>
+                            <span style="color: #ff3366;">🇮🇩 Domestik</span>
+                            <span style="color: #ff3366; font-weight: bold; font-size: 18px;">{domestic_pct:.1f}%</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid #333;">
-                            <span style="color: #ffaa00;">👔 Insider Ownership</span>
-                            <span style="color: #ffaa00; font-weight: bold; font-size: 20px;">{foreign_data['insider_percent']:.1f}%</span>
+                            <span style="color: #ffaa00;">👔 Insider</span>
+                            <span style="color: #ffaa00; font-weight: bold; font-size: 18px;">{insider_pct:.1f}%</span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    flow_color = "🟢" if foreign_data['price_change_1m'] > 3 else ("🔴" if foreign_data['price_change_1m'] < -3 else "🟡")
+                    flow_signal = foreign_data.get('flow_signal', 'N/A')
+                    price_change_1m = foreign_data.get('price_change_1m', 0)
+                    volume_surge = foreign_data.get('volume_surge', 1)
+                    
                     st.markdown(f"""
-                    <div style="background: #1a1a2e; padding: 15px; border-radius: 10px; border-left: 4px solid #00ffcc;">
+                    <div style="background: #1a1a2e; padding: 15px; border-radius: 10px; margin-top: 10px; border-left: 4px solid #00ffcc;">
                         <strong>📊 Sinyal Aliran Dana:</strong><br>
-                        <span style="font-size: 16px;">{foreign_data['flow_signal']}</span>
+                        {flow_signal}
                         <br><br>
                         <div style="display: flex; justify-content: space-between;">
-                            <span>📈 Perubahan 1 Bulan: <strong style="color: {'#00ffcc' if foreign_data['price_change_1m'] > 0 else '#ff3366'}">{foreign_data['price_change_1m']:+.1f}%</strong></span>
-                            <span>📊 Volume Surge: <strong style="color: #ffaa00">{foreign_data['volume_surge']:.1f}x</strong></span>
+                            <span>📈 1 Bulan: <strong style="color: {'#00ffcc' if price_change_1m > 0 else '#ff3366'}">{price_change_1m:+.1f}%</strong></span>
+                            <span>📊 Volume Surge: <strong style="color: #ffaa00">{volume_surge:.1f}x</strong></span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
             else:
                 st.warning("Data Trade Flow tidak tersedia")
             
-            # =====================================================
-            # ========== 4. BROKER FLOW (SEMUA BROKER) ==========
-            # =====================================================
+            # ========== 4. BROKER FLOW ==========
             st.divider()
             st.subheader("🏦 Broker Flow - Aktivitas Semua Broker")
-            st.caption("Menampilkan semua broker yang terdaftar dengan volume transaksi")
             
             if broker_df is not None and not broker_df.empty:
-                # Data broker dengan nama lengkap
-                broker_flow_data = []
+                broker_data = []
                 for _, row in broker_df.iterrows():
                     code = row['BrokerCode']
                     buy = row['BuyVolume']
                     sell = row['SellVolume']
                     net = buy - sell
+                    info = get_broker_info(code)
                     
-                    broker_info = get_broker_info(code)
-                    
-                    broker_flow_data.append({
+                    broker_data.append({
                         'Kode': code,
-                        'Nama Broker': broker_info['name'],
-                        'Tipe': '🌍 ASING' if broker_info['type'] == 'FOREIGN' else '🇮🇩 LOKAL',
-                        'Kategori': broker_info['category'],
+                        'Nama Broker': info['name'],
+                        'Tipe': '🌍 ASING' if info['type'] == 'FOREIGN' else '🇮🇩 LOKAL',
+                        'Kategori': info['category'],
                         'Buy (Lot)': buy // 100,
                         'Sell (Lot)': sell // 100,
                         'Net (Lot)': net // 100,
@@ -394,64 +393,43 @@ def render_tab3():
                         'Aksi': '🔥 AKUMULASI' if net > 0 else ('⚠️ DISTRIBUSI' if net < 0 else '➡️ NETRAL')
                     })
                 
-                broker_flow_data.sort(key=lambda x: abs(x['Net (Lot)']), reverse=True)
+                broker_data.sort(key=lambda x: abs(x['Net (Lot)']), reverse=True)
+                st.dataframe(pd.DataFrame(broker_data), use_container_width=True, hide_index=True)
                 
-                df_broker_flow = pd.DataFrame(broker_flow_data)
-                
-                st.dataframe(
-                    df_broker_flow,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Kode': st.column_config.TextColumn('Kode', width='small'),
-                        'Nama Broker': st.column_config.TextColumn('Nama Broker', width='medium'),
-                        'Tipe': st.column_config.TextColumn('Tipe', width='small'),
-                        'Kategori': st.column_config.TextColumn('Kategori', width='small'),
-                        'Buy (Lot)': st.column_config.NumberColumn('Buy (Lot)', format='%d'),
-                        'Sell (Lot)': st.column_config.NumberColumn('Sell (Lot)', format='%d'),
-                        'Net (Lot)': st.column_config.NumberColumn('Net (Lot)', format='%d'),
-                        'Net %': st.column_config.NumberColumn('Net %', format='%.1f%%'),
-                        'Aksi': st.column_config.TextColumn('Aksi', width='small'),
-                    }
-                )
-                
-                # =====================================================
                 # ========== 5. BROKER SUMMARY ==========
-                # =====================================================
                 st.divider()
                 st.subheader("📊 Broker Summary - Ringkasan Akumulasi/Distribusi")
                 
-                total_accum = sum([d['Net (Lot)'] for d in broker_flow_data if d['Net (Lot)'] > 0])
-                total_dist = sum([abs(d['Net (Lot)']) for d in broker_flow_data if d['Net (Lot)'] < 0])
-                total_volume = sum([d['Buy (Lot)'] + d['Sell (Lot)'] for d in broker_flow_data])
+                total_accum = sum([d['Net (Lot)'] for d in broker_data if d['Net (Lot)'] > 0])
+                total_dist = sum([abs(d['Net (Lot)']) for d in broker_data if d['Net (Lot)'] < 0])
+                total_volume = sum([d['Buy (Lot)'] + d['Sell (Lot)'] for d in broker_data])
                 
-                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                with col_s1:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
                     st.metric("🔥 Akumulasi", f"{total_accum:+,} lot")
-                with col_s2:
+                with col2:
                     st.metric("⚠️ Distribusi", f"{total_dist:+,} lot")
-                with col_s3:
+                with col3:
                     net_flow = total_accum - total_dist
                     st.metric("Net Flow", f"{net_flow:+,} lot", 
                              delta="Bullish" if net_flow > 0 else ("Bearish" if net_flow < 0 else "Neutral"))
-                with col_s4:
+                with col4:
                     st.metric("Total Volume", f"{total_volume:+,} lot")
                 
-                # Visualisasi Bar Chart Broker Flow
-                fig_broker = go.Figure()
+                # ========== BAR CHART BROKER FLOW ==========
+                fig_bar = go.Figure()
+                sorted_data = sorted(broker_data[:20], key=lambda x: x['Net (Lot)'], reverse=True)
                 
-                sorted_data = sorted(broker_flow_data[:20], key=lambda x: x['Net (Lot)'], reverse=True)
-                
-                fig_broker.add_trace(go.Bar(
+                fig_bar.add_trace(go.Bar(
                     x=[d['Kode'] for d in sorted_data],
                     y=[d['Net (Lot)'] for d in sorted_data],
                     marker_color=['#00ffcc' if d['Net (Lot)'] > 0 else '#ff3366' for d in sorted_data],
-                    text=[f"{d['Nama Broker'][:15]}" for d in sorted_data],
+                    text=[d['Nama Broker'][:15] for d in sorted_data],
                     textposition='outside',
                     name='Net Flow'
                 ))
                 
-                fig_broker.update_layout(
+                fig_bar.update_layout(
                     title="Net Flow per Broker (Top 20)",
                     height=400,
                     template="plotly_dark",
@@ -461,151 +439,90 @@ def render_tab3():
                     yaxis_title="Net Volume (Lot)",
                     showlegend=False
                 )
-                st.plotly_chart(fig_broker, use_container_width=True)
+                st.plotly_chart(fig_bar, use_container_width=True)
                 
-                # =====================================================
-                # ========== 6. RUNNING TRADE - SEMUA BROKER ==========
-                # =====================================================
+                # ========== 6. RUNNING TRADE ==========
                 st.divider()
                 st.subheader("💼 Running Trade Realtime - Semua Broker (Asing + Lokal)")
-                st.caption("⚠️ Menampilkan semua broker yang terdaftar. Harga bid/offer disimulasikan dengan spread realistis. Update otomatis setiap 5 detik.")
+                st.caption("⚠️ Menampilkan semua broker yang terdaftar. Harga bid/offer disimulasikan dengan spread realistis.")
                 
-                # ====== TOMBOL REFRESH ======
                 col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 1])
                 with col_refresh2:
                     refresh_btn = st.button("🔄 Refresh Data Realtime", use_container_width=True, type="primary")
                 
-                # ====== HITUNG ATR ======
                 atr = df_hist['High'].rolling(14).max() - df_hist['Low'].rolling(14).min()
                 atr_value = atr.iloc[-1] if not atr.empty else current_price * 0.02
                 
-                # ====== SIMULASI BID/OFFER ======
-                spread_percent = random.uniform(0.001, 0.003)
-                spread = current_price * spread_percent
+                spread_pct = random.uniform(0.001, 0.003)
+                spread = current_price * spread_pct
                 bid_price = current_price - spread/2
                 offer_price = current_price + spread/2
                 
-                # ====== BUAT RUNNING TRADE UNTUK SEMUA BROKER ======
-                running_trades = []
+                running = []
                 trade_no = 0
                 
-                # Dapatkan semua kode broker dari BROKER_CODES
+                # Proses semua broker
                 all_broker_codes = list(BROKER_CODES.keys())
+                broker_dict = {b['Kode']: b for b in broker_data}
                 
-                # Buat dictionary untuk data flow
-                broker_flow_dict = {}
-                for b in broker_flow_data:
-                    broker_flow_dict[b['Kode']] = b
-                
-                # Proses SEMUA broker dari BROKER_CODES
-                for broker_code in all_broker_codes:
-                    broker_info = BROKER_CODES.get(broker_code, {})
-                    
-                    # Cek apakah broker ini ada di data flow
-                    if broker_code in broker_flow_dict:
-                        flow_data = broker_flow_dict[broker_code]
-                        net_lot = flow_data['Net (Lot)']
-                        buy_lot = flow_data['Buy (Lot)']
-                        sell_lot = flow_data['Sell (Lot)']
-                    else:
-                        # Broker tidak aktif di saham ini, skip
+                for code in all_broker_codes:
+                    if code not in broker_dict:
                         continue
                     
-                    # Tentukan aksi berdasarkan net lot
+                    b = broker_dict[code]
+                    net_lot = b['Net (Lot)']
+                    info = BROKER_CODES.get(code, {})
+                    
                     if net_lot > 50:
                         action = '🟢 BUY'
                         price_fluctuation = random.uniform(-0.002, 0.005) * current_price
-                        current_position_price = current_price + price_fluctuation
-                        pnl = ((current_position_price - current_price) / current_price) * 100
+                        current_pos = current_price + price_fluctuation
+                        pnl = ((current_pos - current_price) / current_price) * 100
                         sl = current_price - atr_value * 0.5
                         tp = current_price + atr_value * 1.0
                         status = '✅ AKTIF' if pnl > -3 else '⚠️ NEAR SL'
-                        
                     elif net_lot < -50:
                         action = '🔴 SELL'
                         price_fluctuation = random.uniform(-0.005, 0.002) * current_price
-                        current_position_price = current_price + price_fluctuation
-                        pnl = ((current_price - current_position_price) / current_price) * 100
+                        current_pos = current_price + price_fluctuation
+                        pnl = ((current_price - current_pos) / current_price) * 100
                         sl = current_price + atr_value * 0.5
                         tp = current_price - atr_value * 1.0
                         status = '✅ AKTIF' if pnl > -3 else '⚠️ NEAR SL'
-                        
                     else:
                         action = '🟡 NETRAL'
-                        current_position_price = current_price
+                        current_pos = current_price
                         pnl = 0
                         sl = current_price
                         tp = current_price
                         status = '⏸️ HOLD'
                     
-                    # Tipe broker
-                    broker_type = broker_info.get('type', 'UNKNOWN')
-                    type_icon = '🌍' if broker_type == 'FOREIGN' else '🇮🇩'
-                    
-                    # Kategori broker
-                    category = broker_info.get('category', 'UNKNOWN')
-                    category_map = {
-                        'MAJOR': '🏛️',
-                        'STATE': '🏦',
-                        'FOREIGN': '🌍',
-                        'LOCAL_PRIVATE': '🏢',
-                        'RETAIL': '📱',
-                        'UNKNOWN': '❓'
-                    }
-                    cat_icon = category_map.get(category, '❓')
+                    type_icon = '🌍' if info.get('type') == 'FOREIGN' else '🇮🇩'
                     
                     trade_no += 1
-                    trade = {
+                    running.append({
                         'No': trade_no,
-                        'Kode': broker_code,
-                        'Nama Broker': broker_info.get('name', 'Unknown')[:20],
-                        'Tipe': f"{type_icon} {broker_type}",
-                        'Kategori': f"{cat_icon} {category}",
+                        'Kode': code,
+                        'Nama Broker': info.get('name', 'Unknown')[:18],
+                        'Tipe': f"{type_icon} {info.get('type', 'UNKNOWN')}",
                         'Aksi': action,
                         'Entry': f"{price_label}{current_price:,.2f}".replace(',', '.'),
                         'Bid': f"{price_label}{bid_price:,.2f}".replace(',', '.'),
                         'Offer': f"{price_label}{offer_price:,.2f}".replace(',', '.'),
-                        'Current': f"{price_label}{current_position_price:,.2f}".replace(',', '.'),
+                        'Current': f"{price_label}{current_pos:,.2f}".replace(',', '.'),
                         'Net (Lot)': f"{net_lot:+,}",
                         'SL': f"{price_label}{sl:,.2f}".replace(',', '.'),
                         'TP': f"{price_label}{tp:,.2f}".replace(',', '.'),
                         'P&L': f"{pnl:+.2f}%",
                         'Status': status,
-                        'Spread': f"{spread_percent*100:.3f}%"
-                    }
-                    running_trades.append(trade)
+                        'Spread': f"{spread_pct*100:.3f}%"
+                    })
                 
-                # ====== TAMPILKAN RUNNING TRADE ======
-                if running_trades:
-                    df_running = pd.DataFrame(running_trades)
-                    
-                    st.dataframe(
-                        df_running,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            'No': st.column_config.NumberColumn('No', width='small'),
-                            'Kode': st.column_config.TextColumn('Kode', width='small'),
-                            'Nama Broker': st.column_config.TextColumn('Nama Broker', width='medium'),
-                            'Tipe': st.column_config.TextColumn('Tipe', width='small'),
-                            'Kategori': st.column_config.TextColumn('Kategori', width='small'),
-                            'Aksi': st.column_config.TextColumn('Aksi', width='small'),
-                            'Entry': st.column_config.TextColumn('Entry', width='small'),
-                            'Bid': st.column_config.TextColumn('Bid', width='small'),
-                            'Offer': st.column_config.TextColumn('Offer', width='small'),
-                            'Current': st.column_config.TextColumn('Harga Saat Ini', width='small'),
-                            'Net (Lot)': st.column_config.TextColumn('Net (Lot)', width='small'),
-                            'SL': st.column_config.TextColumn('SL', width='small'),
-                            'TP': st.column_config.TextColumn('TP', width='small'),
-                            'P&L': st.column_config.TextColumn('P&L', width='small'),
-                            'Status': st.column_config.TextColumn('Status', width='small'),
-                            'Spread': st.column_config.TextColumn('Spread', width='small'),
-                        }
-                    )
+                if running:
+                    st.dataframe(pd.DataFrame(running), use_container_width=True, hide_index=True)
                     
                     # ====== METRIK REALTIME ======
                     st.markdown("#### 📊 Realtime Market Data")
-                    
                     col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
                     with col_r1:
                         st.metric("💰 Harga", f"{price_label}{current_price:,.2f}".replace(',', '.'))
@@ -614,11 +531,10 @@ def render_tab3():
                     with col_r3:
                         st.metric("📉 Offer", f"{price_label}{offer_price:,.2f}".replace(',', '.'), delta="Jual")
                     with col_r4:
-                        spread_pct = (spread / current_price) * 100
-                        st.metric("📊 Spread", f"{spread_pct:.3f}%")
+                        st.metric("📊 Spread", f"{(spread/current_price*100):.3f}%")
                     with col_r5:
                         total_pnl = 0
-                        for t in running_trades:
+                        for t in running:
                             try:
                                 pnl_val = float(t['P&L'].replace('%', '').replace('+', ''))
                                 total_pnl += pnl_val
@@ -628,29 +544,29 @@ def render_tab3():
                                  delta="Profit" if total_pnl > 0 else ("Loss" if total_pnl < 0 else "BEP"))
                     
                     # ====== STATISTIK POSISI ======
-                    buy_trades = [t for t in running_trades if 'BUY' in t['Aksi']]
-                    sell_trades = [t for t in running_trades if 'SELL' in t['Aksi']]
-                    netral_trades = [t for t in running_trades if 'NETRAL' in t['Aksi']]
-                    active_trades = [t for t in running_trades if 'AKTIF' in t['Status']]
-                    near_sl = [t for t in running_trades if 'NEAR SL' in t['Status']]
+                    buy_trades = [t for t in running if 'BUY' in t['Aksi']]
+                    sell_trades = [t for t in running if 'SELL' in t['Aksi']]
+                    netral_trades = [t for t in running if 'NETRAL' in t['Aksi']]
+                    active_trades = [t for t in running if 'AKTIF' in t['Status']]
+                    near_sl = [t for t in running if 'NEAR SL' in t['Status']]
                     
-                    col_status1, col_status2, col_status3, col_status4, col_status5 = st.columns(5)
-                    with col_status1:
+                    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
+                    with col_stat1:
                         st.metric("🟢 BUY", len(buy_trades))
-                    with col_status2:
+                    with col_stat2:
                         st.metric("🔴 SELL", len(sell_trades))
-                    with col_status3:
+                    with col_stat3:
                         st.metric("🟡 NETRAL", len(netral_trades))
-                    with col_status4:
+                    with col_stat4:
                         st.metric("✅ Aktif", len(active_trades))
-                    with col_status5:
+                    with col_stat5:
                         st.metric("⚠️ Near SL", len(near_sl), delta="⚠️" if near_sl else "✅")
                     
                     # ====== BROKER DOMINAN ======
                     st.markdown("#### 🏆 Broker Teratas")
                     
-                    foreign_brokers = [t for t in running_trades if 'FOREIGN' in t['Tipe'] and ('BUY' in t['Aksi'] or 'SELL' in t['Aksi'])]
-                    local_brokers = [t for t in running_trades if 'LOKAL' in t['Tipe'] and ('BUY' in t['Aksi'] or 'SELL' in t['Aksi'])]
+                    foreign_brokers = [t for t in running if 'FOREIGN' in t['Tipe'] and ('BUY' in t['Aksi'] or 'SELL' in t['Aksi'])]
+                    local_brokers = [t for t in running if 'LOKAL' in t['Tipe'] and ('BUY' in t['Aksi'] or 'SELL' in t['Aksi'])]
                     
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
@@ -680,9 +596,9 @@ def render_tab3():
                     if near_sl:
                         st.error(f"⚠️ **{len(near_sl)} posisi mendekati Stop Loss!** Pertimbangkan cut loss atau trailing stop.")
                     
-                    st.caption("⚠️ **Disclaimer:** Running Trade adalah simulasi berdasarkan data broker. Bukan rekomendasi investasi. Selalu lakukan analisis sendiri.")
+                    st.caption("⚠️ **Disclaimer:** Running Trade adalah simulasi berdasarkan data broker. Bukan rekomendasi investasi.")
                     
-                    # ====== AUTO-REFRESH INDICATOR ======
+                    # ====== AUTO-REFRESH ======
                     st.markdown(f"""
                     <div style="background: #1a1a2e; padding: 8px 16px; border-radius: 8px; margin-top: 10px; border: 1px solid #00ffcc;">
                         <span style="color: #00ffcc;">🔄</span> 
@@ -690,67 +606,39 @@ def render_tab3():
                         <span style="color: #00ffcc; float: right;">⏱️ Last update: {datetime.now().strftime('%H:%M:%S')}</span>
                     </div>
                     """, unsafe_allow_html=True)
-                    
-                else:
-                    st.warning("Tidak ada data broker aktif untuk saham ini")
                 
-                # =====================================================
-                # ========== 7. DOM / LEVEL 2 DATA (BARU) ==========
-                # =====================================================
+                # ========== 7. DOM (Depth of Market) ==========
                 st.divider()
                 st.subheader("📊 DOM (Depth of Market) - Level 2 Data")
                 st.caption("Menampilkan volume bid (beli) dan offer (jual) di setiap level harga")
                 
-                # ====== GENERATE DOM DATA ======
-                def generate_dom_data(current_price, price_label, num_levels=11):
-                    """Generate simulasi DOM (Depth of Market)"""
+                def gen_dom(price, label, n=11):
+                    step = price * 0.001 / 2
                     
-                    base_spread = current_price * 0.001  # 0.1% spread
-                    step = base_spread / 2
+                    bid_p = [price - (i+1)*step for i in range(n)]
+                    bid_v = [int(random.uniform(15000, 120000) * (1 + (n-i)/n)) for i in range(n)]
+                    bid_f = [int(random.uniform(100, 2000)) for i in range(n)]
                     
-                    bid_prices = []
-                    bid_volumes = []
-                    bid_freq = []
+                    offer_p = [price + (i+1)*step for i in range(n)]
+                    offer_v = [int(random.uniform(15000, 120000) * (1 + (n-i)/n)) for i in range(n)]
+                    offer_f = [int(random.uniform(100, 2000)) for i in range(n)]
                     
-                    for i in range(num_levels):
-                        price = current_price - (i + 1) * step
-                        volume = int(random.uniform(15000, 120000) * (1 + (num_levels - i) / num_levels))
-                        freq = int(random.uniform(100, 2000))
-                        bid_prices.append(price)
-                        bid_volumes.append(volume)
-                        bid_freq.append(freq)
-                    
-                    offer_prices = []
-                    offer_volumes = []
-                    offer_freq = []
-                    
-                    for i in range(num_levels):
-                        price = current_price + (i + 1) * step
-                        volume = int(random.uniform(15000, 120000) * (1 + (num_levels - i) / num_levels))
-                        freq = int(random.uniform(100, 2000))
-                        offer_prices.append(price)
-                        offer_volumes.append(volume)
-                        offer_freq.append(freq)
-                    
-                    return bid_prices, offer_prices, bid_volumes, offer_volumes, bid_freq, offer_freq
+                    return bid_p, offer_p, bid_v, offer_v, bid_f, offer_f
                 
-                # Generate DOM
-                bid_prices, offer_prices, bid_volumes, offer_volumes, bid_freq, offer_freq = generate_dom_data(current_price, price_label)
+                bid_p, offer_p, bid_v, offer_v, bid_f, offer_f = gen_dom(current_price, price_label)
                 
-                # ====== TAMPILKAN DOM ======
-                dom_display = []
-                for i in range(len(bid_prices)):
-                    dom_display.append({
-                        'Freq': f"{bid_freq[i]:,}",
-                        'Lot': f"{bid_volumes[i]:,}",
-                        'Bid': f"{price_label}{bid_prices[i]:,.0f}".replace(',', '.'),
+                dom_rows = []
+                for i in range(len(bid_p)):
+                    dom_rows.append({
+                        'Freq': f"{bid_f[i]:,}",
+                        'Lot': f"{bid_v[i]:,}",
+                        'Bid': f"{price_label}{bid_p[i]:,.0f}".replace(',', '.'),
                         'Offer': '',
                         'Lot_Offer': '',
                         'Freq_Offer': ''
                     })
                 
-                # Separator (harga saat ini)
-                dom_display.append({
+                dom_rows.append({
                     'Freq': '-',
                     'Lot': '-',
                     'Bid': f"{price_label}{current_price:,.0f}".replace(',', '.'),
@@ -759,114 +647,60 @@ def render_tab3():
                     'Freq_Offer': '-'
                 })
                 
-                for i in range(len(offer_prices)):
-                    dom_display.append({
+                for i in range(len(offer_p)):
+                    dom_rows.append({
                         'Freq': '',
                         'Lot': '',
                         'Bid': '',
-                        'Offer': f"{price_label}{offer_prices[i]:,.0f}".replace(',', '.'),
-                        'Lot_Offer': f"{offer_volumes[i]:,}",
-                        'Freq_Offer': f"{offer_freq[i]:,}"
+                        'Offer': f"{price_label}{offer_p[i]:,.0f}".replace(',', '.'),
+                        'Lot_Offer': f"{offer_v[i]:,}",
+                        'Freq_Offer': f"{offer_f[i]:,}"
                     })
                 
-                df_dom = pd.DataFrame(dom_display)
-                
-                st.dataframe(
-                    df_dom,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Freq': st.column_config.TextColumn('Freq', width='small'),
-                        'Lot': st.column_config.TextColumn('Lot', width='small'),
-                        'Bid': st.column_config.TextColumn('Bid', width='small'),
-                        'Offer': st.column_config.TextColumn('Offer', width='small'),
-                        'Lot_Offer': st.column_config.TextColumn('Lot', width='small'),
-                        'Freq_Offer': st.column_config.TextColumn('Freq', width='small'),
-                    }
-                )
+                st.dataframe(pd.DataFrame(dom_rows), use_container_width=True, hide_index=True)
                 
                 # ====== VISUALISASI DOM ======
-                st.markdown("#### 📈 Visualisasi DOM (Depth of Market)")
-                
                 fig_dom = go.Figure()
-                
-                # Bid side (negatif untuk display)
                 fig_dom.add_trace(go.Bar(
-                    x=bid_prices,
-                    y=[-v for v in bid_volumes],
+                    x=bid_p,
+                    y=[-v for v in bid_v],
                     name='Bid (Beli)',
                     marker_color='#00ffcc',
-                    orientation='v',
-                    text=[f"{v:,}" for v in bid_volumes],
-                    textposition='outside',
-                    hovertemplate='Harga: %{x:,.0f}<br>Volume: %{customdata:,.0f}<extra></extra>',
-                    customdata=bid_volumes
+                    orientation='v'
                 ))
-                
-                # Offer side (positif)
                 fig_dom.add_trace(go.Bar(
-                    x=offer_prices,
-                    y=offer_volumes,
+                    x=offer_p,
+                    y=offer_v,
                     name='Offer (Jual)',
                     marker_color='#ff3366',
-                    orientation='v',
-                    text=[f"{v:,}" for v in offer_volumes],
-                    textposition='outside',
-                    hovertemplate='Harga: %{x:,.0f}<br>Volume: %{customdata:,.0f}<extra></extra>',
-                    customdata=offer_volumes
+                    orientation='v'
                 ))
-                
-                # Garis harga saat ini
-                fig_dom.add_vline(
-                    x=current_price,
-                    line_dash="dash",
-                    line_color="#ffaa00",
-                    annotation_text=f"Harga: {price_label}{current_price:,.0f}".replace(',', '.'),
-                    annotation_position="top"
-                )
-                
+                fig_dom.add_vline(x=current_price, line_dash="dash", line_color="#ffaa00")
                 fig_dom.update_layout(
                     title="Depth of Market - Bid vs Offer",
-                    height=400,
+                    height=350,
                     template="plotly_dark",
                     paper_bgcolor="#0a0a0a",
                     plot_bgcolor="#1a1a2e",
-                    xaxis_title="Harga",
-                    yaxis_title="Volume (Lot)",
-                    barmode='relative',
-                    showlegend=True,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="center",
-                        x=0.5
-                    )
+                    barmode='relative'
                 )
                 st.plotly_chart(fig_dom, use_container_width=True)
                 
                 # ====== DOM SUMMARY ======
-                st.markdown("#### 📊 DOM Summary")
+                total_bid = sum(bid_v)
+                total_offer = sum(offer_v)
                 
-                total_bid_volume = sum(bid_volumes)
-                total_offer_volume = sum(offer_volumes)
-                total_bid_freq = sum(bid_freq)
-                total_offer_freq = sum(offer_freq)
-                
-                col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+                col_d1, col_d2, col_d3 = st.columns(3)
                 with col_d1:
-                    st.metric("📥 Total Bid Volume", f"{total_bid_volume:,} lot")
+                    st.metric("📥 Total Bid Volume", f"{total_bid:,} lot")
                 with col_d2:
-                    st.metric("📤 Total Offer Volume", f"{total_offer_volume:,} lot")
+                    st.metric("📤 Total Offer Volume", f"{total_offer:,} lot")
                 with col_d3:
-                    imbalance = total_bid_volume - total_offer_volume
+                    imbalance = total_bid - total_offer
                     st.metric("⚖️ Volume Imbalance", f"{imbalance:+,} lot", 
                              delta="Bid Dominant" if imbalance > 0 else ("Offer Dominant" if imbalance < 0 else "Balanced"))
-                with col_d4:
-                    ratio = total_bid_volume / total_offer_volume if total_offer_volume > 0 else 0
-                    st.metric("📊 Bid/Offer Ratio", f"{ratio:.2f}x")
                 
-                # ========== INSTITUTIONAL HOLDERS (FITUR LAMA) ==========
+                # ========== INSTITUTIONAL HOLDERS ==========
                 if inst_data:
                     with st.expander("🏛️ Institutional Holders (Data Institusi)"):
                         if inst_data.get('institutional_holders'):
@@ -878,10 +712,10 @@ def render_tab3():
             else:
                 st.warning("Data Broker tidak tersedia untuk saham ini")
             
-            # ========== DETAIL PREDIKSI 30 HARI ==========
+            # ========== DETAIL PREDIKSI ==========
             with st.expander("📊 Detail Prediksi 30 Hari"):
                 pred_df = pd.DataFrame({
-                    'Hari ke-': list(range(1, 31)),
+                    'Hari': list(range(1, 31)),
                     'Tanggal': [(datetime.now() + timedelta(days=i)).strftime('%d/%m/%Y') for i in range(1, 31)],
                     'Prediksi': [f"{price_label}{p:,.2f}".replace(',', '.') for p in pred_values],
                     'Perubahan': [f"{((p - current_price)/current_price*100):+.2f}%" for p in pred_values]
@@ -909,7 +743,7 @@ def render_tab3():
                 )
                 st.plotly_chart(fig_pred, use_container_width=True)
             
-            # ========== CANDLESTICK PATTERNS (FITUR LAMA) ==========
+            # ========== CANDLESTICK PATTERNS ==========
             from app.core.pattern_detector import get_latest_patterns
             patterns = get_latest_patterns(df_hist, days=30)
             if patterns:
@@ -917,7 +751,7 @@ def render_tab3():
                     for p in patterns:
                         st.write(f"🔍 {p}")
     
-    # ========== UNTUK GOLD ==========
+    # ========== GOLD ==========
     elif len(stock_list) == 1 and stock_list[0] == "GOLD":
         with st.spinner("Menghitung prediksi emas..."):
             ticker = yf.Ticker("GC=F")
@@ -940,12 +774,12 @@ def render_tab3():
                 fig.update_layout(title="Gold - 30 Day Forecast", height=450, template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Running Trade untuk Gold
+                # Running Trade Gold
                 st.divider()
                 st.subheader("💼 Running Trade - Emas")
                 
-                spread_percent = random.uniform(0.0005, 0.0015)
-                spread = current_price * spread_percent
+                spread_pct = random.uniform(0.0005, 0.0015)
+                spread = current_price * spread_pct
                 bid_price = current_price - spread/2
                 offer_price = current_price + spread/2
                 
@@ -956,19 +790,17 @@ def render_tab3():
                     action = '🟢 BUY'
                     sl = current_price - atr_value * 0.5
                     tp = current_price + atr_value * 1.5
-                    pnl_sim = random.uniform(-0.3, 1.5)
+                    pnl = random.uniform(-0.3, 1.5)
                 elif pct_change < -1:
                     action = '🔴 SELL'
                     sl = current_price + atr_value * 0.5
                     tp = current_price - atr_value * 1.5
-                    pnl_sim = random.uniform(-1.5, 0.3)
+                    pnl = random.uniform(-1.5, 0.3)
                 else:
                     action = '🟡 HOLD'
                     sl = current_price
                     tp = current_price
-                    pnl_sim = 0
-                
-                current_pos_price = current_price * (1 + pnl_sim/100)
+                    pnl = 0
                 
                 trade_data = [{
                     'No': 1,
@@ -977,74 +809,41 @@ def render_tab3():
                     'Entry': f"${current_price:.2f}",
                     'Bid': f"${bid_price:.2f}",
                     'Offer': f"${offer_price:.2f}",
-                    'Current': f"${current_pos_price:.2f}",
                     'SL': f"${sl:.2f}",
                     'TP': f"${tp:.2f}",
-                    'P&L': f"{pnl_sim:+.2f}%",
-                    'Status': '✅ AKTIF' if action != '🟡 HOLD' else '⏸️ HOLD',
-                    'Spread': f"{spread_percent*100:.3f}%"
+                    'P&L': f"{pnl:+.2f}%",
+                    'Spread': f"{spread_pct*100:.3f}%"
                 }]
-                
                 st.dataframe(pd.DataFrame(trade_data), use_container_width=True, hide_index=True)
                 
-                col_g1, col_g2, col_g3, col_g4 = st.columns(4)
-                with col_g1:
-                    st.metric("💰 Harga", f"${current_price:.2f}")
-                with col_g2:
-                    st.metric("📈 Bid", f"${bid_price:.2f}")
-                with col_g3:
-                    st.metric("📉 Offer", f"${offer_price:.2f}")
-                with col_g4:
-                    st.metric("📊 Spread", f"{spread_percent*100:.3f}%")
-                
-                # ========== DOM UNTUK GOLD ==========
+                # DOM Gold
                 st.divider()
-                st.subheader("📊 DOM (Depth of Market) - Level 2 Data")
+                st.subheader("📊 DOM (Depth of Market)")
                 
-                def generate_dom_data_gold(current_price, num_levels=11):
-                    base_spread = current_price * 0.0005
-                    step = base_spread / 2
-                    
-                    bid_prices = []
-                    bid_volumes = []
-                    bid_freq = []
-                    
-                    for i in range(num_levels):
-                        price = current_price - (i + 1) * step
-                        volume = int(random.uniform(1500, 12000) * (1 + (num_levels - i) / num_levels))
-                        freq = int(random.uniform(50, 500))
-                        bid_prices.append(price)
-                        bid_volumes.append(volume)
-                        bid_freq.append(freq)
-                    
-                    offer_prices = []
-                    offer_volumes = []
-                    offer_freq = []
-                    
-                    for i in range(num_levels):
-                        price = current_price + (i + 1) * step
-                        volume = int(random.uniform(1500, 12000) * (1 + (num_levels - i) / num_levels))
-                        freq = int(random.uniform(50, 500))
-                        offer_prices.append(price)
-                        offer_volumes.append(volume)
-                        offer_freq.append(freq)
-                    
-                    return bid_prices, offer_prices, bid_volumes, offer_volumes, bid_freq, offer_freq
+                def gen_dom_gold(price, n=11):
+                    step = price * 0.0005 / 2
+                    bid_p = [price - (i+1)*step for i in range(n)]
+                    bid_v = [int(random.uniform(1500, 12000) * (1 + (n-i)/n)) for i in range(n)]
+                    bid_f = [int(random.uniform(50, 500)) for i in range(n)]
+                    offer_p = [price + (i+1)*step for i in range(n)]
+                    offer_v = [int(random.uniform(1500, 12000) * (1 + (n-i)/n)) for i in range(n)]
+                    offer_f = [int(random.uniform(50, 500)) for i in range(n)]
+                    return bid_p, offer_p, bid_v, offer_v, bid_f, offer_f
                 
-                bid_prices, offer_prices, bid_volumes, offer_volumes, bid_freq, offer_freq = generate_dom_data_gold(current_price)
+                bid_p, offer_p, bid_v, offer_v, bid_f, offer_f = gen_dom_gold(current_price)
                 
-                dom_display = []
-                for i in range(len(bid_prices)):
-                    dom_display.append({
-                        'Freq': f"{bid_freq[i]:,}",
-                        'Lot': f"{bid_volumes[i]:,}",
-                        'Bid': f"${bid_prices[i]:,.2f}",
+                dom_rows = []
+                for i in range(len(bid_p)):
+                    dom_rows.append({
+                        'Freq': f"{bid_f[i]:,}",
+                        'Lot': f"{bid_v[i]:,}",
+                        'Bid': f"${bid_p[i]:.2f}",
                         'Offer': '',
                         'Lot_Offer': '',
                         'Freq_Offer': ''
                     })
                 
-                dom_display.append({
+                dom_rows.append({
                     'Freq': '-',
                     'Lot': '-',
                     'Bid': f"${current_price:.2f}",
@@ -1053,339 +852,81 @@ def render_tab3():
                     'Freq_Offer': '-'
                 })
                 
-                for i in range(len(offer_prices)):
-                    dom_display.append({
+                for i in range(len(offer_p)):
+                    dom_rows.append({
                         'Freq': '',
                         'Lot': '',
                         'Bid': '',
-                        'Offer': f"${offer_prices[i]:,.2f}",
-                        'Lot_Offer': f"{offer_volumes[i]:,}",
-                        'Freq_Offer': f"{offer_freq[i]:,}"
+                        'Offer': f"${offer_p[i]:.2f}",
+                        'Lot_Offer': f"{offer_v[i]:,}",
+                        'Freq_Offer': f"{offer_f[i]:,}"
                     })
                 
-                df_dom_gold = pd.DataFrame(dom_display)
-                st.dataframe(df_dom_gold, use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(dom_rows), use_container_width=True, hide_index=True)
                 
-                fig_dom_gold = go.Figure()
-                fig_dom_gold.add_trace(go.Bar(
-                    x=bid_prices,
-                    y=[-v for v in bid_volumes],
-                    name='Bid (Beli)',
+                fig_dom = go.Figure()
+                fig_dom.add_trace(go.Bar(
+                    x=bid_p,
+                    y=[-v for v in bid_v],
+                    name='Bid',
                     marker_color='#00ffcc',
                     orientation='v'
                 ))
-                fig_dom_gold.add_trace(go.Bar(
-                    x=offer_prices,
-                    y=offer_volumes,
-                    name='Offer (Jual)',
+                fig_dom.add_trace(go.Bar(
+                    x=offer_p,
+                    y=offer_v,
+                    name='Offer',
                     marker_color='#ff3366',
                     orientation='v'
                 ))
-                fig_dom_gold.add_vline(x=current_price, line_dash="dash", line_color="#ffaa00")
-                fig_dom_gold.update_layout(
+                fig_dom.add_vline(x=current_price, line_dash="dash", line_color="#ffaa00")
+                fig_dom.update_layout(
                     title="Depth of Market - Gold",
-                    height=400,
+                    height=350,
                     template="plotly_dark",
                     paper_bgcolor="#0a0a0a",
                     plot_bgcolor="#1a1a2e",
                     barmode='relative'
                 )
-                st.plotly_chart(fig_dom_gold, use_container_width=True)
+                st.plotly_chart(fig_dom, use_container_width=True)
                 
-                st.info("🥇 Untuk emas, analisis bandar (kode broker) tidak tersedia karena hanya untuk saham.")
+                st.info("🥇 Untuk emas, analisis bandar tidak tersedia karena hanya untuk saham.")
     
-    # ========== UNTUK MULTIPLE STOCKS (KONGLOMERAT) ==========
+    # ========== MULTIPLE STOCKS ==========
     else:
         st.subheader(f"📊 {display_name}")
         
-        forecast_data = []
+        data = []
         for sym in stock_list:
-            df_hist = get_stock_data(sym, period="3mo")
-            if df_hist is not None and not df_hist.empty:
-                hist_price = df_hist['Close']
-                pred_values = exponential_smoothing(hist_price, forecast_days=30)
-                current_price = hist_price.iloc[-1]
-                last_pred = pred_values[-1]
-                pct_change = ((last_pred - current_price) / current_price) * 100
+            df = get_stock_data(sym, period="3mo")
+            if df is not None and not df.empty:
+                hist = df['Close']
+                pred = exponential_smoothing(hist, forecast_days=30)
+                current = hist.iloc[-1]
+                last = pred[-1]
+                pct = ((last - current) / current) * 100
                 
                 broker_net = get_broker_net_summary(sym)
                 if broker_net:
-                    top_broker = broker_net[0] if broker_net else None
-                    broker_signal = "🔥 AKUMULASI" if top_broker and top_broker['is_accumulate'] else ("⚠️ DISTRIBUSI" if top_broker and top_broker['is_distribute'] else "➡️ NETRAL")
-                    broker_name = get_broker_info(top_broker['broker_code'])['name'] if top_broker else "N/A"
+                    top = broker_net[0] if broker_net else None
+                    signal = "🔥 AKUMULASI" if top and top['is_accumulate'] else ("⚠️ DISTRIBUSI" if top and top['is_distribute'] else "➡️ NETRAL")
+                    name = get_broker_info(top['broker_code'])['name'] if top else "N/A"
                 else:
-                    broker_signal = "N/A"
-                    broker_name = "N/A"
+                    signal = "N/A"
+                    name = "N/A"
                 
-                forecast_data.append({
+                data.append({
                     'Kode': sym,
-                    'Harga': format_price(current_price, sym),
-                    'Prediksi 30H': format_price(last_pred, sym),
-                    'Perubahan': f"{pct_change:+.1f}%",
-                    'Trend': '📈' if pct_change > 2 else ('📉' if pct_change < -2 else '➡️'),
-                    'Broker Signal': broker_signal,
-                    'Top Broker': broker_name
+                    'Harga': format_price(current, sym),
+                    'Prediksi 30H': format_price(last, sym),
+                    'Perubahan': f"{pct:+.1f}%",
+                    'Trend': '📈' if pct > 2 else ('📉' if pct < -2 else '➡️'),
+                    'Broker Signal': signal,
+                    'Top Broker': name
                 })
         
-        if forecast_data:
-            df_ringkasan = pd.DataFrame(forecast_data)
-            st.dataframe(df_ringkasan, use_container_width=True, hide_index=True)
-            
-            st.divider()
-            st.subheader("🔍 Cari Manual - Detail + Analisis Bandar")
-            st.caption("Pilih saham dari daftar di atas untuk melihat detail prediksi dan analisis bandar")
-            
-            stock_codes = [d['Kode'] for d in forecast_data]
-            selected_symbol = st.selectbox("Pilih Kode Saham untuk Detail", options=stock_codes, key="manual_search_konglo")
-            
-            if selected_symbol:
-                with st.spinner(f"Mengambil detail {selected_symbol}..."):
-                    df_hist_detail = get_stock_data(selected_symbol, period="3mo")
-                    currency, _ = get_currency(selected_symbol)
-                    price_label = "Rp" if currency == "IDR" else "$"
-                    
-                    if df_hist_detail is not None and not df_hist_detail.empty:
-                        foreign_data = get_foreign_flow_summary(selected_symbol)
-                        broker_df = get_realtime_broker_summary(selected_symbol)
-                        broker_net = get_broker_net_summary(selected_symbol)
-                        
-                        hist_price = df_hist_detail['Close']
-                        pred_values = exponential_smoothing(hist_price, forecast_days=30)
-                        current_price = hist_price.iloc[-1]
-                        last_pred = pred_values[-1]
-                        pct_change = ((last_pred - current_price) / current_price) * 100
-                        
-                        col1, col2 = st.columns(2)
-                        col1.metric("Harga Saat Ini", f"{price_label}{current_price:,.2f}".replace(',', '.'))
-                        col2.metric("Prediksi 30 Hari", f"{price_label}{last_pred:,.2f}".replace(',', '.'), delta=f"{pct_change:+.1f}%")
-                        
-                        future_dates = [datetime.now() + timedelta(days=i+1) for i in range(30)]
-                        
-                        fig = go.Figure()
-                        fig.add_trace(go.Candlestick(
-                            x=df_hist_detail.index[-60:],
-                            open=df_hist_detail['Open'][-60:],
-                            high=df_hist_detail['High'][-60:],
-                            low=df_hist_detail['Low'][-60:],
-                            close=df_hist_detail['Close'][-60:],
-                            name=selected_symbol,
-                            increasing_line_color='#00ffcc',
-                            decreasing_line_color='#ff3366'
-                        ))
-                        fig.add_trace(go.Scatter(x=future_dates, y=pred_values, name='Prediksi', line=dict(color='#ffaa00', width=2, dash='dot')))
-                        fig.update_layout(title=f"{selected_symbol} - 30 Day Forecast", height=450, template="plotly_dark")
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Trade Flow
-                        st.divider()
-                        st.subheader("🌊 Trade Flow")
-                        if foreign_data:
-                            col_f1, col_f2, col_f3 = st.columns(3)
-                            with col_f1:
-                                st.metric("Asing", f"{foreign_data['estimated_foreign_percent']:.1f}%")
-                            with col_f2:
-                                st.metric("Domestik", f"{foreign_data['estimated_domestic_percent']:.1f}%")
-                            with col_f3:
-                                st.metric("Insider", f"{foreign_data['insider_percent']:.1f}%")
-                            st.markdown(f"**Sinyal:** {foreign_data['flow_signal']}")
-                        
-                        # Broker Flow
-                        st.divider()
-                        st.subheader("🏦 Broker Flow")
-                        
-                        if broker_df is not None and not broker_df.empty:
-                            broker_flow_data = []
-                            for _, row in broker_df.iterrows():
-                                code = row['BrokerCode']
-                                buy = row['BuyVolume']
-                                sell = row['SellVolume']
-                                net = buy - sell
-                                broker_info = get_broker_info(code)
-                                broker_flow_data.append({
-                                    'Kode': code,
-                                    'Nama Broker': broker_info['name'],
-                                    'Buy (Lot)': buy // 100,
-                                    'Sell (Lot)': sell // 100,
-                                    'Net (Lot)': net // 100,
-                                    'Aksi': '🔥 AKUMULASI' if net > 0 else ('⚠️ DISTRIBUSI' if net < 0 else '➡️ NETRAL')
-                                })
-                            
-                            broker_flow_data.sort(key=lambda x: abs(x['Net (Lot)']), reverse=True)
-                            st.dataframe(pd.DataFrame(broker_flow_data), use_container_width=True, hide_index=True)
-                            
-                            # Broker Summary
-                            total_accum = sum([d['Net (Lot)'] for d in broker_flow_data if d['Net (Lot)'] > 0])
-                            total_dist = sum([abs(d['Net (Lot)']) for d in broker_flow_data if d['Net (Lot)'] < 0])
-                            
-                            col_s1, col_s2, col_s3 = st.columns(3)
-                            with col_s1:
-                                st.metric("🔥 Akumulasi", f"{total_accum:+,} lot")
-                            with col_s2:
-                                st.metric("⚠️ Distribusi", f"{total_dist:+,} lot")
-                            with col_s3:
-                                st.metric("Net Flow", f"{total_accum - total_dist:+,} lot")
-                            
-                            # Running Trade
-                            st.divider()
-                            st.subheader("💼 Running Trade - Semua Broker")
-                            
-                            atr = df_hist_detail['High'].rolling(14).max() - df_hist_detail['Low'].rolling(14).min()
-                            atr_value = atr.iloc[-1] if not atr.empty else current_price * 0.02
-                            spread_percent = random.uniform(0.001, 0.003)
-                            spread = current_price * spread_percent
-                            bid_price = current_price - spread/2
-                            offer_price = current_price + spread/2
-                            
-                            running_trades = []
-                            trade_no = 0
-                            
-                            all_broker_codes = list(BROKER_CODES.keys())
-                            broker_flow_dict = {b['Kode']: b for b in broker_flow_data}
-                            
-                            for broker_code in all_broker_codes:
-                                if broker_code not in broker_flow_dict:
-                                    continue
-                                
-                                flow_data = broker_flow_dict[broker_code]
-                                net_lot = flow_data['Net (Lot)']
-                                broker_info = BROKER_CODES.get(broker_code, {})
-                                
-                                if net_lot > 50:
-                                    action = '🟢 BUY'
-                                    sl = current_price - atr_value * 0.5
-                                    tp = current_price + atr_value * 1.0
-                                    pnl = random.uniform(-0.5, 2.0)
-                                    status = '✅ AKTIF' if pnl > -3 else '⚠️ NEAR SL'
-                                elif net_lot < -50:
-                                    action = '🔴 SELL'
-                                    sl = current_price + atr_value * 0.5
-                                    tp = current_price - atr_value * 1.0
-                                    pnl = random.uniform(-2.0, 0.5)
-                                    status = '✅ AKTIF' if pnl > -3 else '⚠️ NEAR SL'
-                                else:
-                                    action = '🟡 NETRAL'
-                                    sl = current_price
-                                    tp = current_price
-                                    pnl = 0
-                                    status = '⏸️ HOLD'
-                                
-                                trade_no += 1
-                                running_trades.append({
-                                    'No': trade_no,
-                                    'Kode': broker_code,
-                                    'Nama Broker': broker_info.get('name', 'Unknown')[:20],
-                                    'Aksi': action,
-                                    'Entry': f"{price_label}{current_price:,.2f}".replace(',', '.'),
-                                    'Bid': f"{price_label}{bid_price:,.2f}".replace(',', '.'),
-                                    'Offer': f"{price_label}{offer_price:,.2f}".replace(',', '.'),
-                                    'Current': f"{price_label}{current_price * (1 + pnl/100):,.2f}".replace(',', '.'),
-                                    'Net (Lot)': f"{net_lot:+,}",
-                                    'SL': f"{price_label}{sl:,.2f}".replace(',', '.'),
-                                    'TP': f"{price_label}{tp:,.2f}".replace(',', '.'),
-                                    'P&L': f"{pnl:+.2f}%",
-                                    'Status': status,
-                                    'Spread': f"{spread_percent*100:.3f}%"
-                                })
-                            
-                            if running_trades:
-                                st.dataframe(pd.DataFrame(running_trades), use_container_width=True, hide_index=True)
-                            else:
-                                st.info("Tidak ada sinyal trading dari broker")
-                            
-                            # DOM
-                            st.divider()
-                            st.subheader("📊 DOM (Depth of Market)")
-                            
-                            def generate_dom_data_konglo(current_price, price_label, num_levels=11):
-                                base_spread = current_price * 0.001
-                                step = base_spread / 2
-                                
-                                bid_prices = []
-                                bid_volumes = []
-                                bid_freq = []
-                                
-                                for i in range(num_levels):
-                                    price = current_price - (i + 1) * step
-                                    volume = int(random.uniform(15000, 120000) * (1 + (num_levels - i) / num_levels))
-                                    freq = int(random.uniform(100, 2000))
-                                    bid_prices.append(price)
-                                    bid_volumes.append(volume)
-                                    bid_freq.append(freq)
-                                
-                                offer_prices = []
-                                offer_volumes = []
-                                offer_freq = []
-                                
-                                for i in range(num_levels):
-                                    price = current_price + (i + 1) * step
-                                    volume = int(random.uniform(15000, 120000) * (1 + (num_levels - i) / num_levels))
-                                    freq = int(random.uniform(100, 2000))
-                                    offer_prices.append(price)
-                                    offer_volumes.append(volume)
-                                    offer_freq.append(freq)
-                                
-                                return bid_prices, offer_prices, bid_volumes, offer_volumes, bid_freq, offer_freq
-                            
-                            bid_prices, offer_prices, bid_volumes, offer_volumes, bid_freq, offer_freq = generate_dom_data_konglo(current_price, price_label)
-                            
-                            dom_display = []
-                            for i in range(len(bid_prices)):
-                                dom_display.append({
-                                    'Freq': f"{bid_freq[i]:,}",
-                                    'Lot': f"{bid_volumes[i]:,}",
-                                    'Bid': f"{price_label}{bid_prices[i]:,.0f}".replace(',', '.'),
-                                    'Offer': '',
-                                    'Lot_Offer': '',
-                                    'Freq_Offer': ''
-                                })
-                            
-                            dom_display.append({
-                                'Freq': '-',
-                                'Lot': '-',
-                                'Bid': f"{price_label}{current_price:,.0f}".replace(',', '.'),
-                                'Offer': f"{price_label}{current_price:,.0f}".replace(',', '.'),
-                                'Lot_Offer': '-',
-                                'Freq_Offer': '-'
-                            })
-                            
-                            for i in range(len(offer_prices)):
-                                dom_display.append({
-                                    'Freq': '',
-                                    'Lot': '',
-                                    'Bid': '',
-                                    'Offer': f"{price_label}{offer_prices[i]:,.0f}".replace(',', '.'),
-                                    'Lot_Offer': f"{offer_volumes[i]:,}",
-                                    'Freq_Offer': f"{offer_freq[i]:,}"
-                                })
-                            
-                            df_dom = pd.DataFrame(dom_display)
-                            st.dataframe(df_dom, use_container_width=True, hide_index=True)
-                            
-                            fig_dom = go.Figure()
-                            fig_dom.add_trace(go.Bar(
-                                x=bid_prices,
-                                y=[-v for v in bid_volumes],
-                                name='Bid (Beli)',
-                                marker_color='#00ffcc',
-                                orientation='v'
-                            ))
-                            fig_dom.add_trace(go.Bar(
-                                x=offer_prices,
-                                y=offer_volumes,
-                                name='Offer (Jual)',
-                                marker_color='#ff3366',
-                                orientation='v'
-                            ))
-                            fig_dom.add_vline(x=current_price, line_dash="dash", line_color="#ffaa00")
-                            fig_dom.update_layout(
-                                title="Depth of Market",
-                                height=400,
-                                template="plotly_dark",
-                                paper_bgcolor="#0a0a0a",
-                                plot_bgcolor="#1a1a2e",
-                                barmode='relative'
-                            )
-                            st.plotly_chart(fig_dom, use_container_width=True)
+        if data:
+            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
 
 def render_tab4():
     """Tab Search Saham + Profil Perusahaan Lengkap"""
