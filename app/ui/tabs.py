@@ -1408,7 +1408,7 @@ def render_tab3():
 
 def render_tab4():
     """Tab Search Saham + Profil Perusahaan Lengkap"""
-    from app.utils.config import ALL_STOCKS, ALL_KONGLOMERAT_GROUPS
+    from app.utils.config import ALL_STOCKS, ALL_KONGLOMERAT_GROUPS, SECTOR_STOCKS
     from app.core.analysis import get_stock_info, get_stock_data, load_data
     from app.core.entry_signal import generate_entry_signal
     from app.ui.components import signal_card, divider
@@ -1468,37 +1468,47 @@ def render_tab4():
         st.markdown("---")
         st.markdown("### 📋 Atau Pilih dari Daftar")
         
-        col_opt_left, col_opt_mid, col_opt_right = st.columns([1, 4, 1])
+        col_opt_left, col_opt_mid, col_opt_right = st.columns([1, 6, 1])
         with col_opt_mid:
+            # Filter sektor + dropdown saham (sama seperti Tab Prediksi)
+            sector_names = ["Semua Sektor"] + list(SECTOR_STOCKS.keys())
+            col_sector, col_asset = st.columns([1, 2])
+            
+            with col_sector:
+                selected_sector = st.selectbox(
+                    "Sektor",
+                    options=sector_names,
+                    format_func=lambda x: x if x == "Semua Sektor" else f"{x} ({len(SECTOR_STOCKS[x])})",
+                    key="tab4_sector"
+                )
+            
             search_options = []
             
-            # Grup konglomerat
-            if ALL_KONGLOMERAT_GROUPS:
-                for group in ALL_KONGLOMERAT_GROUPS:
-                    search_options.append((f"🏛️ {group['name']}", f"GROUP_{group['name']}", group['desc']))
+            if selected_sector == "Semua Sektor":
+                # Grup konglomerat
+                if ALL_KONGLOMERAT_GROUPS:
+                    search_options.append(("━━━ KONGLOMERAT ━━━", "SEPARATOR", ""))
+                    for group in ALL_KONGLOMERAT_GROUPS:
+                        search_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}", group['desc']))
+                
+                search_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR", ""))
+                stock_pool = ALL_STOCKS
+            else:
+                # Placeholder supaya saham pertama tidak langsung terbuka saat sektor diganti
+                search_options.append((f"━━━ {selected_sector.upper()} ━━━", "SEPARATOR", ""))
+                stock_pool = SECTOR_STOCKS[selected_sector]
             
-            if search_options:
-                search_options.append(("━━━━━━━━━━━━━━━━━━━━", "SEPARATOR", ""))
+            valid_stocks = sorted(dict.fromkeys(s for s in stock_pool if '.JK' in s))
+            for sym in valid_stocks:
+                search_options.append((f"📊 {sym}", sym, ""))
             
-            # Saham top
-            top_stocks = ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 
-                          'ADRO.JK', 'BRPT.JK', 'TPIA.JK', 'UNVR.JK', 'ICBP.JK',
-                          'CPIN.JK', 'JPFA.JK', 'PGAS.JK', 'SMGR.JK', 'TOWR.JK',
-                          'BSDE.JK', 'PWON.JK', 'JSMR.JK', 'ANTM.JK', 'MDKA.JK']
-            for sym in top_stocks:
-                search_options.append((f"📈 {sym}", sym, ""))
-            
-            if top_stocks:
-                search_options.append(("━━━━━━━━━━━━━━━━━━━━", "SEPARATOR", ""))
-                search_options.append(("✏️ Atau ketik manual di atas", "MANUAL", ""))
-            
-            selected_item = st.selectbox(
-                "Pilih Grup Konglomerat / Saham Top", 
-                options=search_options, 
-                format_func=lambda x: x[0],
-                key="dropdown_select",
-                label_visibility="collapsed"
-            )
+            with col_asset:
+                selected_item = st.selectbox(
+                    "Pilih Saham / Grup Konglomerat" if selected_sector == "Semua Sektor" else f"Pilih Saham ({selected_sector})",
+                    options=search_options,
+                    format_func=lambda x: x[0],
+                    key="dropdown_select"
+                )
             
             selected_value = selected_item[1]
             
