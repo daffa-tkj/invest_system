@@ -190,8 +190,8 @@ def render_tab3():
             dropdown_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}"))
     
     dropdown_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR"))
-    valid_stocks = [s for s in ALL_STOCKS if '.JK' in s]
-    for sym in valid_stocks[:100]:
+    valid_stocks = sorted(dict.fromkeys(s for s in ALL_STOCKS if '.JK' in s))
+    for sym in valid_stocks:
         dropdown_options.append((f"📊 {sym}", sym))
     
     selected_label, selected_value = st.selectbox(
