@@ -168,7 +168,7 @@ def render_tab2():
 
 def render_tab3():
     """Tab Prediksi - Dengan semua saham + Analisis Bandar (Semua Broker Asing + Lokal) + DOM"""
-    from app.utils.config import ALL_STOCKS, FORECAST_STOCKS, ALL_KONGLOMERAT_GROUPS
+    from app.utils.config import ALL_STOCKS, FORECAST_STOCKS, ALL_KONGLOMERAT_GROUPS, SECTOR_STOCKS
     from app.core.analysis import get_institutional_holders, get_foreign_flow_summary, get_realtime_broker_summary, get_broker_net_summary
     from app.utils.broker_codes import get_broker_info, BROKER_CODES
     import plotly.graph_objects as go
@@ -177,28 +177,46 @@ def render_tab3():
     
     st.subheader("🔮 Prediksi Harga 30 Hari + Analisis Bandar (Semua Broker)")
     
-    # Build dropdown options
+    # Filter sektor + dropdown aset
+    sector_names = ["Semua Sektor"] + list(SECTOR_STOCKS.keys())
+    col_sector, col_asset = st.columns([1, 2])
+    
+    with col_sector:
+        selected_sector = st.selectbox(
+            "Sektor",
+            options=sector_names,
+            format_func=lambda x: x if x == "Semua Sektor" else f"{x} ({len(SECTOR_STOCKS[x])})",
+            key="tab3_sector"
+        )
+    
     dropdown_options = []
     
-    # Emas
-    dropdown_options.append(("🥇 GOLD", "GOLD"))
+    if selected_sector == "Semua Sektor":
+        # Emas
+        dropdown_options.append(("🥇 GOLD", "GOLD"))
+        
+        # Kategori konglomerat
+        if ALL_KONGLOMERAT_GROUPS:
+            dropdown_options.append(("━━━ KONGLOMERAT ━━━", "SEPARATOR"))
+            for group in ALL_KONGLOMERAT_GROUPS:
+                dropdown_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}"))
+        
+        dropdown_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR"))
+        stock_pool = ALL_STOCKS
+    else:
+        stock_pool = SECTOR_STOCKS[selected_sector]
     
-    # Kategori konglomerat
-    if ALL_KONGLOMERAT_GROUPS:
-        dropdown_options.append(("━━━ KONGLOMERAT ━━━", "SEPARATOR"))
-        for group in ALL_KONGLOMERAT_GROUPS:
-            dropdown_options.append((f"🏢 {group['name']}", f"GROUP_{group['name']}"))
-    
-    dropdown_options.append(("━━━ SAHAM INDIVIDUAL ━━━", "SEPARATOR"))
-    valid_stocks = sorted(dict.fromkeys(s for s in ALL_STOCKS if '.JK' in s))
+    valid_stocks = sorted(dict.fromkeys(s for s in stock_pool if '.JK' in s))
     for sym in valid_stocks:
         dropdown_options.append((f"📊 {sym}", sym))
     
-    selected_label, selected_value = st.selectbox(
-        "Pilih Aset / Grup Konglomerat",
-        options=dropdown_options,
-        format_func=lambda x: x[0]
-    )
+    with col_asset:
+        selected_label, selected_value = st.selectbox(
+            "Pilih Aset / Grup Konglomerat" if selected_sector == "Semua Sektor" else f"Pilih Saham ({selected_sector})",
+            options=dropdown_options,
+            format_func=lambda x: x[0],
+            key="tab3_asset"
+        )
     
     if selected_value == "SEPARATOR":
         st.info("Pilih aset dari menu di atas")
