@@ -127,6 +127,20 @@ TECH_STOCKS = [
     'DIVA.JK', 'BELI.JK', 'BUKA.JK', 'GOTO.JK', 'DNET.JK', 'PANI.JK'
 ]
 
+# ========== PETA SEKTOR (dipakai dropdown filter sektor) ==========
+SECTOR_STOCKS = {
+    'Perbankan': BANK_STOCKS,
+    'Telekomunikasi & Media': TELCO_STOCKS,
+    'Energi & Tambang': ENERGY_STOCKS,
+    'Consumer Goods': CONSUMER_STOCKS,
+    'Property & Real Estate': PROPERTY_STOCKS,
+    'Infrastruktur & Konstruksi': INFRA_STOCKS,
+    'Retail & Distribusi': RETAIL_STOCKS,
+    'Otomotif': AUTOMOTIVE_STOCKS,
+    'Healthcare': HEALTHCARE_STOCKS,
+    'Teknologi & Digital': TECH_STOCKS,
+}
+
 # === GABUNGAN SEMUA SAHAM (unik, urutan kapitalisasi dipertahankan) ===
 ALL_STOCKS = list(dict.fromkeys(
     LARGE_CAP_STOCKS + MID_CAP_STOCKS + SMALL_CAP_STOCKS + MICRO_CAP_STOCKS
