@@ -1,361 +1,72 @@
 # app/ui/styles.py
-# Tema dark yang tenang: satu warna aksen, kontras jelas, tanpa glow/animasi.
-# Class lama (.buy-signal, .sell-signal, .neutral-signal, .card, .info-box*) tetap
-# ada supaya tabs.py tidak perlu diubah.
-
+# Prinsip: tidak memaksa warna latar/teks. Permukaan memakai rgba netral dan teks 'inherit',
+# jadi tampilan otomatis ikut tema Streamlit (gelap/terang). Warna sinyal dipilih agar terbaca di keduanya.
 CSS_STYLES = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+:root{
+  --ok:#12a36b; --bad:#e5484d; --warn:#d99a0b;
+  --line:rgba(127,127,127,.28); --surface:rgba(127,127,127,.07); --muted:rgba(127,127,127,.95);
+}
+html, body, .stApp, button, input, textarea { font-family:'IBM Plex Sans', system-ui, sans-serif; }
+.block-container{ padding-top:1.4rem; padding-bottom:3rem; max-width:1180px; }
+header[data-testid="stHeader"]{ background:transparent; }
 
-:root {
-    --bg:          #0d1117;
-    --surface:     #151b23;
-    --surface-2:   #1c242e;
-    --border:      #2a3441;
-    --text:        #e6edf3;
-    --text-muted:  #8b98a8;
-    --accent:      #2dd4bf;
-    --accent-soft: rgba(45, 212, 191, 0.12);
-    --buy:         #4ade80;
-    --buy-soft:    rgba(74, 222, 128, 0.12);
-    --sell:        #f87171;
-    --sell-soft:   rgba(248, 113, 113, 0.12);
-    --warn:        #fbbf24;
-    --warn-soft:   rgba(251, 191, 36, 0.12);
-    --radius:      12px;
-}
+/* Judul */
+.brand{ display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap; margin-bottom:.2rem; }
+.brand h1{ font-size:1.7rem; font-weight:700; margin:0; padding:0; letter-spacing:-.01em; }
+.brand span{ color:var(--muted); font-size:.95rem; }
 
-/* ───────── Dasar ───────── */
-.stApp {
-    background-color: var(--bg);
-    color: var(--text);
-    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
-}
+/* Kepala saham */
+.quote{ display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; flex-wrap:wrap;
+        padding:.9rem 0 1rem; border-bottom:1px solid var(--line); margin-bottom:1rem; }
+.quote .name{ font-size:.95rem; color:var(--muted); }
+.quote .code{ font-size:1.5rem; font-weight:700; }
+.quote .px{ font-size:2.1rem; font-weight:600; font-variant-numeric:tabular-nums; line-height:1.1; text-align:right; }
+.quote .chg{ font-size:.95rem; font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
+.up{ color:var(--ok); } .down{ color:var(--bad); }
 
-.stApp p, .stApp label, .stApp li {
-    font-family: inherit;
-}
+/* Tiga gaya trading: elemen utama halaman */
+.horizons{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:.4rem 0 1.2rem; }
+.horizons.one{ grid-template-columns:minmax(0,520px); }
+.hz{ border:1px solid var(--line); border-radius:10px; background:var(--surface);
+     padding:16px 16px 12px; border-top:5px solid var(--warn); min-width:0; }
+.hz.buy{ border-top-color:var(--ok); } .hz.sell{ border-top-color:var(--bad); }
+.hz .style{ font-weight:700; font-size:1.05rem; }
+.hz .span{ color:var(--muted); font-size:.82rem; margin-bottom:.7rem; }
+.hz .verdict{ font-size:1.35rem; font-weight:700; line-height:1.2; }
+.hz.buy .verdict{ color:var(--ok); } .hz.sell .verdict{ color:var(--bad); } .hz.wait .verdict{ color:var(--warn); }
+.hz .meta{ color:var(--muted); font-size:.85rem; margin:.25rem 0 .8rem; }
+.lv{ display:grid; grid-template-columns:repeat(auto-fit,minmax(88px,1fr)); gap:8px; margin-bottom:.7rem; }
+.lv div{ border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+.lv small{ display:block; color:var(--muted); font-size:.72rem; }
+.lv b{ font-variant-numeric:tabular-nums; font-size:.92rem; }
+.hz details summary{ cursor:pointer; font-size:.88rem; font-weight:600; padding:4px 0; }
+.hz details summary:focus-visible{ outline:2px solid var(--ok); outline-offset:2px; }
+.hz details ul{ margin:.3rem 0 0; padding-left:1.1rem; font-size:.86rem; }
+.hz details li{ margin-bottom:.2rem; }
 
-.main .block-container,
-[data-testid="stMainBlockContainer"] {
-    padding-top: 2rem;
-    padding-bottom: 4rem;
-    max-width: 1280px;
-}
+.note{ border-left:4px solid var(--warn); background:var(--surface); padding:.6rem .9rem;
+       border-radius:0 8px 8px 0; font-size:.88rem; margin:.6rem 0; }
+.foot{ color:var(--muted); font-size:.8rem; margin-top:2rem; border-top:1px solid var(--line); padding-top:.8rem; }
 
-footer { visibility: hidden; }
+/* Komponen Streamlit */
+[data-testid="stMetric"]{ border:1px solid var(--line); border-radius:8px; padding:10px 14px; background:var(--surface); }
+.stTabs [role="tablist"]{ overflow-x:auto; gap:4px; scrollbar-width:thin; }
+.stTabs [role="tab"]{ white-space:nowrap; padding:8px 14px; }
+.stButton button, .stDownloadButton button{ border-radius:8px; font-weight:600; min-height:44px; }
+[data-testid="stTextInput"] input{ min-height:46px; font-size:1.05rem; }
 
-/* ───────── Judul ───────── */
-.stApp h1, .stApp h2, .stApp h3, .stApp h4 {
-    color: var(--text);
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-.stApp h1 { font-size: 1.9rem; }
-.stApp h2 { font-size: 1.45rem; }
-.stApp h3 { font-size: 1.15rem; margin-top: 0.4rem; }
+[data-testid="stPills"]{ margin-bottom:.2rem; }
 
-[data-testid="stCaptionContainer"],
-.stApp small {
-    color: var(--text-muted);
+/* Responsif */
+@media (max-width:900px){ .horizons, .horizons.one{ grid-template-columns:1fr; } }
+@media (max-width:640px){
+  .block-container{ padding-left:.8rem; padding-right:.8rem; }
+  .brand h1{ font-size:1.35rem; }
+  .quote .px{ font-size:1.7rem; } .quote .code{ font-size:1.25rem; }
+  .quote > div:last-child{ width:100%; display:flex; justify-content:space-between; align-items:baseline; }
 }
-
-hr {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 1.25rem 0;
-    opacity: 1;
-}
-
-/* ───────── Tab navigasi ───────── */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    scrollbar-width: none;
-}
-.stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { display: none; }
-
-.stTabs [data-baseweb="tab"] {
-    background: transparent;
-    color: var(--text-muted);
-    font-weight: 500;
-    font-size: 0.92rem;
-    padding: 10px 16px;
-    border-radius: 8px 8px 0 0;
-    white-space: nowrap;
-    transition: color .15s, background .15s;
-}
-.stTabs [data-baseweb="tab"]:hover {
-    color: var(--text);
-    background: var(--surface);
-}
-.stTabs [aria-selected="true"] {
-    color: var(--accent) !important;
-    font-weight: 600;
-}
-.stTabs [data-baseweb="tab-highlight"] {
-    background-color: var(--accent);
-    height: 2px;
-}
-.stTabs [data-baseweb="tab-border"] { display: none; }
-.stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
-
-/* ───────── Kartu metrik ───────── */
-[data-testid="stMetric"] {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 18px;
-}
-[data-testid="stMetricLabel"] {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-[data-testid="stMetricLabel"] p { font-size: 0.8rem; }
-[data-testid="stMetricValue"] {
-    color: var(--text);
-    font-size: 1.6rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-[data-testid="stMetricDelta"] {
-    font-size: 0.8rem;
-    font-weight: 500;
-}
-
-/* ───────── Badge sinyal ───────── */
-.buy-signal, .sell-signal, .neutral-signal {
-    display: inline-block;
-    padding: 6px 16px;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 0.95rem;
-    text-align: center;
-    line-height: 1.4;
-    border: 1px solid transparent;
-}
-.buy-signal     { background: var(--buy-soft);  color: var(--buy);  border-color: rgba(74,222,128,.35); }
-.sell-signal    { background: var(--sell-soft); color: var(--sell); border-color: rgba(248,113,113,.35); }
-.neutral-signal { background: var(--warn-soft); color: var(--warn); border-color: rgba(251,191,36,.35); }
-
-/* Kartu hasil sinyal (dipakai signal_card) */
-.signal-wrap {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    margin: 12px 0;
-    text-align: center;
-}
-.signal-meta {
-    display: flex;
-    justify-content: center;
-    gap: 28px;
-    margin-top: 12px;
-    color: var(--text-muted);
-    font-size: 0.88rem;
-}
-.signal-meta strong {
-    color: var(--text);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-
-/* ───────── Kartu umum & kotak info ───────── */
-.card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-    margin: 10px 0;
-}
-
-.info-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin: 10px 0;
-    color: var(--text);
-    font-size: 0.92rem;
-    line-height: 1.5;
-}
-.info-box-info    { border-left: 3px solid var(--accent); }
-.info-box-warning { border-left: 3px solid var(--warn); }
-.info-box-error   { border-left: 3px solid var(--sell); }
-
-/* HTML inline di tabs.py (kartu dengan background #1a1a2e) ikut diselaraskan */
-[data-testid="stMarkdownContainer"] div[style*="#1a1a2e"] {
-    background: var(--surface) !important;
-    border-radius: var(--radius) !important;
-}
-[data-testid="stMarkdownContainer"] div[style*="linear-gradient"][style*="#1a1a2e"] {
-    background: var(--surface) !important;
-}
-
-/* ───────── Sidebar ───────── */
-[data-testid="stSidebar"] {
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-}
-[data-testid="stSidebar"] .block-container,
-[data-testid="stSidebarContent"] {
-    padding-top: 1.5rem;
-}
-
-/* ───────── Expander ───────── */
-[data-testid="stExpander"] {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-}
-[data-testid="stExpander"] summary {
-    color: var(--text);
-    font-weight: 500;
-}
-[data-testid="stExpander"] summary:hover { color: var(--accent); }
-
-/* ───────── Alert bawaan Streamlit (success/warning/error/info) ───────── */
-[data-testid="stAlert"] {
-    border-radius: 10px;
-}
-
-/* ───────── Tabel & grafik ───────── */
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-}
-[data-testid="stPlotlyChart"] {
-    background: #0a0a0a;               /* sama dengan paper_bgcolor chart di tabs.py */
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 6px;
-    overflow: hidden;
-}
-
-/* ───────── Input ───────── */
-[data-testid="stWidgetLabel"] p,
-.stApp label {
-    color: var(--text);
-    font-weight: 500;
-    font-size: 0.88rem;
-}
-
-div[data-baseweb="select"] > div,
-[data-testid="stTextInput"] input,
-[data-testid="stNumberInput"] input,
-[data-testid="stDateInput"] input,
-[data-testid="stTextArea"] textarea {
-    background-color: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-}
-
-div[data-baseweb="select"] > div:hover,
-[data-testid="stTextInput"] input:hover,
-[data-testid="stNumberInput"] input:hover {
-    border-color: var(--text-muted);
-}
-
-div[data-baseweb="select"] > div:focus-within,
-[data-testid="stTextInput"] input:focus,
-[data-testid="stNumberInput"] input:focus,
-[data-testid="stTextArea"] textarea:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
-}
-
-[data-testid="stTextInput"] input::placeholder,
-[data-testid="stTextArea"] textarea::placeholder {
-    color: var(--text-muted);
-}
-
-div[data-baseweb="select"] svg { fill: var(--text-muted); }
-
-/* Daftar dropdown */
-div[data-baseweb="popover"] ul[role="listbox"],
-div[data-baseweb="popover"] div[data-baseweb="menu"] {
-    background-color: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-}
-div[data-baseweb="popover"] li[role="option"] {
-    color: var(--text);
-    background-color: transparent;
-}
-div[data-baseweb="popover"] li[role="option"]:hover,
-div[data-baseweb="popover"] li[role="option"][aria-selected="true"] {
-    background-color: var(--accent-soft);
-    color: var(--accent);
-}
-
-/* Slider */
-[data-testid="stSlider"] [role="slider"] {
-    background-color: var(--accent);
-    box-shadow: none;
-}
-[data-testid="stSlider"] [data-testid="stThumbValue"],
-[data-testid="stSlider"] [data-testid="stTickBarMin"],
-[data-testid="stSlider"] [data-testid="stTickBarMax"] {
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-}
-[data-testid="stSlider"] [data-testid="stThumbValue"] { color: var(--accent); }
-
-/* ───────── Tombol ───────── */
-.stButton > button,
-.stDownloadButton > button {
-    background: var(--surface-2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-weight: 500;
-    padding: 0.45rem 1rem;
-    transition: border-color .15s, color .15s, background .15s;
-}
-.stButton > button:hover,
-.stDownloadButton > button:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: var(--surface-2);
-}
-.stButton > button:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
-.stButton > button[kind="primary"],
-.stButton > button[data-testid="stBaseButton-primary"] {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #04201c;
-    font-weight: 600;
-}
-.stButton > button[kind="primary"]:hover,
-.stButton > button[data-testid="stBaseButton-primary"]:hover {
-    background: #5eead4;
-    color: #04201c;
-}
-
-/* ───────── Progress & spinner ───────── */
-[data-testid="stProgress"] > div > div > div > div {
-    background-color: var(--accent);
-}
-
-/* ───────── Mobile ───────── */
-@media (max-width: 640px) {
-    .main .block-container,
-    [data-testid="stMainBlockContainer"] {
-        padding-left: 1rem;
-        padding-right: 1rem;
-    }
-    [data-testid="stMetricValue"] { font-size: 1.3rem; }
-    .stTabs [data-baseweb="tab"] { padding: 8px 12px; font-size: 0.85rem; }
-    .signal-meta { gap: 16px; flex-wrap: wrap; }
-}
+@media (prefers-reduced-motion:no-preference){ .hz{ transition:border-color .15s; } .hz:hover{ border-color:var(--muted); } }
 </style>
 """
