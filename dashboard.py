@@ -1,64 +1,60 @@
-# dashboard.py
+# dashboard.py  ->  jalankan: streamlit run dashboard.py
 import streamlit as st
-from app.ui.components import inject_styles, signal_card, metric_card
-from app.ui.tabs import render_tab1, render_tab2, render_tab3, render_tab4, render_tab5, render_tab6, render_tab7
-from datetime import datetime
 
-# Konfigurasi
-st.set_page_config(
-    page_title="💰 Sistem Analisis Saham & Emas",
-    page_icon="💰",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Ridho Capital", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
-# Inject CSS
+from app.data.market import resolve_symbol
+from app.ui import views
+from app.ui.components import footer, inject_styles
+from app.utils.symbols import clean
+
 inject_styles()
+ss = st.session_state
+ss.setdefault("q", st.query_params.get("s", "BBCA"))
+ss.setdefault("risk", "Moderate")
+ss.setdefault("refresh_sec", 30)
 
-# Title dengan HTML
-st.markdown("""
-<div style="text-align:center; padding:20px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); border-radius:20px; margin-bottom:30px;">
-    <h1 style="color:white;">💰 Ridho Capital</h1>
-    <p style="color:#e0e0e0;">Analisis Fundamental | Teknikal | Entry Signal | Scalping Emas</p>
-    <p style="color:#c0c0c0; font-size:12px;">Last update: {}</p>
-</div>
-""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
+ANALYSIS, SCANNER = "🔎 Analisis", "🧭 Pemindai"
 
-# Sidebar dengan styling
-with st.sidebar:
-    st.markdown("""
-    <div style="background:#2a2a3a; border-radius:15px; padding:15px; margin-bottom:20px;">
-        <h3 style="color:#00b09b;">⚙️ Pengaturan</h3>
-        <p style="font-size:13px; color:#a0a0b0;">Sistem real-time entry signal</p>
-        <hr style="border-color:#3a3a4a;">
-    </div>
-    """, unsafe_allow_html=True)
-    
-    risk_level = st.select_slider(
-        "Risk Level",
-        options=["Conservative", "Moderate", "Aggressive"],
-        value="Moderate"
-    )
-    
-    st.caption("💡 Tips: Conservative = minimal buy signals")
-    st.divider()
-    st.markdown("**Disclaimer:** Do your own research, cunt.")
 
-# Tabs dengan ikon
-tab_titles = ["🏆 Top Saham", "🥇 Emas + Signal", "🔮 Prediksi", "🔍 Search", "📰 Info", "⚡ Scalping", "🦈 BANDAR"]
-tabs = st.tabs(tab_titles)
+def _goto_analysis():
+    """Mengetik kode atau memilih pilihan cepat selalu membuka halaman Analisis."""
+    v = ss.get("quick")
+    if v:
+        ss["q"], ss["quick"] = v, None
+    ss["nav"], ss["sec"] = ANALYSIS, "Ringkasan"
 
-with tabs[0]:
-    render_tab1(risk_level)
-with tabs[1]:
-    render_tab2()
-with tabs[2]:
-    render_tab3()
-with tabs[3]:
-    render_tab4()
-with tabs[4]:
-    render_tab5()
-with tabs[5]:
-    render_tab6()
-with tabs[6]:
-    render_tab7()
+
+top, cfg = st.columns([6, 1])
+top.markdown('<div class="brand"><h1>Ridho Capital</h1><span>Analisis dan pemindai saham & emas: Swing, Scalping, Longterm</span></div>',
+             unsafe_allow_html=True)
+with cfg.popover("Pengaturan", width="stretch"):
+    st.select_slider("Tingkat risiko", ["Conservative", "Moderate", "Aggressive"], key="risk")
+    st.caption("Conservative: hanya sinyal beli keyakinan tinggi. Aggressive: skor positif tipis ikut ditandai beli.")
+    st.select_slider("Segarkan harga tiap", [0, 15, 30, 60], key="refresh_sec",
+                     format_func=lambda s: "Mati" if s == 0 else f"{s} detik",
+                     help="Data Yahoo Finance tertunda, bukan realtime bursa.")
+
+st.text_input("Cari saham atau emas", key="q", on_change=_goto_analysis, label_visibility="collapsed",
+              help="Tanpa .JK. Tekan Enter untuk membuka analisisnya.", placeholder="Ketik kode lalu Enter, mis. BBCA, TLKM, GOTO, GOLD")
+st.pills("Pilihan cepat", ["BBCA", "BBRI", "TLKM", "ANTM", "GOTO", "GOLD", "IHSG"], key="quick",
+         on_change=_goto_analysis, label_visibility="collapsed")
+page = st.pills("Halaman", [ANALYSIS, SCANNER], key="nav", default=ANALYSIS, label_visibility="collapsed") or ANALYSIS
+st.divider()
+
+risk = ss["risk"]
+if page == SCANNER:
+    views.render_scanner(risk)
+else:
+    if not clean(ss["q"]):
+        st.info("Ketik kode saham di kolom pencarian untuk mulai.")
+        st.stop()
+    with st.spinner("Mencari data..."):
+        symbol, df = resolve_symbol(ss["q"])
+    if symbol is None:
+        st.error(f"Kode “{clean(ss['q'])}” tidak ditemukan. Periksa ejaan atau coba kode lain.")
+        st.stop()
+    st.query_params["s"] = clean(ss["q"])
+    views.render_analysis_page(symbol, df, risk)
+
+footer()
