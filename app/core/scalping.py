@@ -4,32 +4,19 @@ import pandas as pd
 import numpy as np
 import ta
 
-def get_gold_data(timeframe="1h", days=7):
-    """Ambil data emas dengan timeframe tertentu"""
-    ticker = yf.Ticker("GC=F")
-    
-    if timeframe == "1h":
-        period = "7d"
-        interval = "1h"
-    elif timeframe == "4h":
-        period = "30d"
-        interval = "1h"
-    else:
-        period = "30d"
-        interval = "1d"
-    
-    df = ticker.history(period=period, interval=interval)
-    
+def get_intraday(symbol="GC=F", timeframe="1h"):
+    """Data intraday untuk simbol apa pun. timeframe: '1h' atau '4h'."""
+    df = yf.Ticker(symbol).history(period="1mo", interval="1h")
     if timeframe == "4h" and not df.empty:
-        df = df.resample('4H').agg({
-            'Open': 'first',
-            'High': 'max',
-            'Low': 'min',
-            'Close': 'last',
-            'Volume': 'sum'
-        }).dropna()
-    
+        df = df.resample("4h").agg({"Open": "first", "High": "max", "Low": "min",
+                                    "Close": "last", "Volume": "sum"}).dropna()
     return df
+
+
+def get_gold_data(timeframe="1h", days=7):
+    """Kompatibilitas lama"""
+    return get_intraday("GC=F", timeframe)
+
 
 def calculate_scalping_indicators(df):
     """Hitung indikator untuk scalping"""
